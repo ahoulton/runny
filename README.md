@@ -78,7 +78,7 @@ Interpreter resolution walks upward from the script's directory (up to the execu
 
 ## Build from source
 
-Requires Go 1.26 or newer.
+Requires Go 1.27.1 or newer.
 
 ```sh
 go build -o runny ./src          # ./runny.exe on Windows
