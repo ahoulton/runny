@@ -11,7 +11,9 @@ Grab the binary for your platform from the [latest release](https://github.com/a
 | Platform | Asset |
 |---|---|
 | Windows x64 | `runny_<version>_windows_amd64.exe` |
+| Windows ARM64 | `runny_<version>_windows_arm64.exe` |
 | Linux x64 | `runny_<version>_linux_amd64` |
+| Linux ARM64 | `runny_<version>_linux_arm64` |
 | macOS Intel | `runny_<version>_darwin_amd64` |
 | macOS Apple Silicon | `runny_<version>_darwin_arm64` |
 
@@ -89,10 +91,12 @@ Cross-compilation (from any OS):
 
 ```sh
 GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -o runny_linux ./src
+GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -o runny_linux ./src
 GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -o runny_mac   ./src
 GOOS=windows GOARCH=amd64                go build -o runny.exe   ./src
+GOOS=windows GOARCH=arm64                go build -o runny.exe   ./src
 ```
 
-Pushing a `v*` tag triggers `.github/workflows/release.yml`, which verifies, cross-builds all four targets, and publishes them as release assets.
+Pushing a `v*` tag triggers `.github/workflows/release.yml`, which verifies, cross-builds all six targets, and publishes them as release assets.
 
 Note: Runny takes over the terminal while it runs, so it needs a real console — not a piped shell.
