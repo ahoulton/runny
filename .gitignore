@@ -1,0 +1,7 @@
+.freebuff/
+.omp/
+.idea/
+build/
+AGENTS.md
+runny_config.json
+*.exe
