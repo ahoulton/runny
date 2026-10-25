@@ -2,6 +2,6 @@
 .omp/
 .idea/
 build/
-AGENTS.md
+AGENTS.local.md
 runny_config.json
 *.exe
