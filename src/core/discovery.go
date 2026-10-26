@@ -2,20 +2,58 @@ package core
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 )
 
-// buildIgnoredDirs builds the set of directory names to skip during script
-// discovery. Names are compared case-insensitively, matching the previous
-// hardcoded map behavior (which listed both "Lib" and "lib").
-func buildIgnoredDirs(cfg Config) map[string]bool {
-	m := make(map[string]bool, len(cfg.ExcludedDirs))
-	for _, name := range cfg.ExcludedDirs {
-		m[strings.ToLower(name)] = true
+// exclusions holds the configured directories to skip during script
+// discovery: bare names, matched at any depth, and search-root-relative
+// paths such as "redirect/core", matched exactly.
+type exclusions struct {
+	names map[string]bool
+	paths map[string]bool
+}
+
+// buildExclusions splits excluded_dirs entries into bare directory names and
+// root-relative paths. An entry containing a separator is a path; anything
+// else keeps the original "skip any directory with this name" behavior.
+// Matching is case-insensitive, matching the previous hardcoded map behavior
+// (which listed both "Lib" and "lib"), and path entries accept either
+// separator.
+func buildExclusions(cfg Config) exclusions {
+	ex := exclusions{
+		names: make(map[string]bool, len(cfg.ExcludedDirs)),
+		paths: make(map[string]bool, len(cfg.ExcludedDirs)),
 	}
-	return m
+	for _, entry := range cfg.ExcludedDirs {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if strings.ContainsAny(entry, `/\`) {
+			if p := normalizeExcludedPath(entry); p != "" {
+				ex.paths[p] = true
+			}
+			continue
+		}
+		ex.names[strings.ToLower(entry)] = true
+	}
+	return ex
+}
+
+// normalizeExcludedPath converts a root-relative excluded path to the form
+// used during the walk: forward slashes, no "." segments or trailing slash,
+// lowercase. Empty and root-only entries are dropped; the scan root itself is
+// never excluded.
+func normalizeExcludedPath(entry string) string {
+	p := path.Clean(strings.ReplaceAll(entry, `\`, "/"))
+	p = strings.TrimPrefix(p, "/")
+	if p == "" || p == "." {
+		return ""
+	}
+	return strings.ToLower(p)
 }
 
 // buildIncludedExtensions normalizes the configured script extensions to
@@ -41,15 +79,17 @@ func buildIncludedExtensions(cfg Config) map[string]bool {
 func FindScripts(root string, cfg Config) []string {
 	var scripts []string
 
-	ignoredDirs := buildIgnoredDirs(cfg)
+	ex := buildExclusions(cfg)
 	includedExtensions := buildIncludedExtensions(cfg)
-	findScriptsWalk(root, &scripts, ignoredDirs, includedExtensions)
+	findScriptsWalk(root, "", &scripts, ex, includedExtensions)
 	sort.Strings(scripts)
 	return scripts
 }
 
-// findScriptsWalk does the actual recursion with prebuilt lookup sets.
-func findScriptsWalk(dir string, scripts *[]string, ignoredDirs, includedExtensions map[string]bool) {
+// findScriptsWalk does the actual recursion with prebuilt lookup sets. rel is
+// dir's slash-separated path relative to the scan root ("" at the root) and is
+// used to match root-relative exclusion entries.
+func findScriptsWalk(dir, rel string, scripts *[]string, ex exclusions, includedExtensions map[string]bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		// Silently skip directories that cannot be read
@@ -61,9 +101,20 @@ func findScriptsWalk(dir string, scripts *[]string, ignoredDirs, includedExtensi
 		fullPath := filepath.Join(dir, name)
 
 		if entry.IsDir() {
-			if !ignoredDirs[strings.ToLower(name)] {
-				findScriptsWalk(fullPath, scripts, ignoredDirs, includedExtensions)
+			if ex.names[strings.ToLower(name)] {
+				continue
 			}
+			childRel := ""
+			if len(ex.paths) > 0 {
+				childRel = name
+				if rel != "" {
+					childRel = rel + "/" + name
+				}
+				if ex.paths[strings.ToLower(childRel)] {
+					continue
+				}
+			}
+			findScriptsWalk(fullPath, childRel, scripts, ex, includedExtensions)
 			continue
 		}
 

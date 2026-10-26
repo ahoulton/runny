@@ -14,7 +14,7 @@ import (
 // Config represents the persistent configuration for Runny.
 type Config struct {
 	SearchDirectory    string   `json:"search_directory"`
-	ExcludedDirs       []string `json:"excluded_dirs"`
+	ExcludedDirs       []string `json:"excluded_dirs"` // names at any depth, or paths relative to SearchDirectory
 	IncludedExtensions []string `json:"included_extensions"`
 	VenvDir            string   `json:"venv_dir"`
 	PythonExecutable   string   `json:"python_executable"`
