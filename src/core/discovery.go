@@ -2,20 +2,79 @@ package core
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 )
 
-// buildIgnoredDirs builds the set of directory names to skip during script
-// discovery. Names are compared case-insensitively, matching the previous
-// hardcoded map behavior (which listed both "Lib" and "lib").
-func buildIgnoredDirs(cfg Config) map[string]bool {
-	m := make(map[string]bool, len(cfg.ExcludedDirs))
-	for _, name := range cfg.ExcludedDirs {
-		m[strings.ToLower(name)] = true
+// exclusions holds the configured directories to skip during script
+// discovery: bare names, matched at any depth, and search-root-relative
+// paths such as "redirect/core", matched exactly.
+type exclusions struct {
+	names map[string]bool
+	paths map[string]bool
+}
+
+// buildExclusions splits excluded_dirs entries into bare directory names and
+// root-relative paths. An entry containing a separator is a path; anything
+// else keeps the original "skip any directory with this name" behavior.
+// Matching is case-insensitive, matching the previous hardcoded map behavior
+// (which listed both "Lib" and "lib"), and path entries accept either
+// separator.
+//
+// Absolute and drive-qualified entries are unsupported and dropped before
+// classification, so they match nothing rather than being re-anchored to
+// search_directory or matched as a name. This runs before the separator test
+// because "D:x" is drive-relative but contains no separator.
+func buildExclusions(cfg Config) exclusions {
+	ex := exclusions{
+		names: make(map[string]bool, len(cfg.ExcludedDirs)),
+		paths: make(map[string]bool, len(cfg.ExcludedDirs)),
 	}
-	return m
+	for _, entry := range cfg.ExcludedDirs {
+		entry = strings.TrimSpace(entry)
+		if entry == "" || isDriveQualified(entry) {
+			continue
+		}
+		if strings.ContainsAny(entry, `/\`) {
+			if p := normalizeExcludedPath(entry); p != "" {
+				ex.paths[p] = true
+			}
+			continue
+		}
+		ex.names[strings.ToLower(entry)] = true
+	}
+	return ex
+}
+
+// normalizeExcludedPath converts a root-relative excluded path to the form
+// used during the walk: forward slashes, no "." segments or trailing slash,
+// lowercase. Empty and root-only entries are dropped; the scan root itself is
+// never excluded. Absolute entries (POSIX "/x", Windows "\x" or "//host/share")
+// are unsupported and dropped too: they cannot match a path relative to the
+// scan root, and stripping the leading separator would silently re-anchor them
+// to search_directory, hiding a subtree the user did not name. Drive-qualified
+// entries never reach here — buildExclusions drops them, including the
+// separator-less "D:x" form. Prefixing such an entry with "./" opts back in.
+func normalizeExcludedPath(entry string) string {
+	p := path.Clean(strings.ReplaceAll(entry, `\`, "/"))
+	if p == "" || p == "." || p == ".." || strings.HasPrefix(p, "/") {
+		return ""
+	}
+	return strings.ToLower(p)
+}
+
+// isDriveQualified reports whether entry begins with a Windows drive prefix: a
+// letter followed by a colon, with or without a following separator ("D:/x",
+// "D:\x", "D:x"). Checked on the raw entry, so "./D:/x" is not drive-qualified
+// and stays usable as a root-relative path.
+func isDriveQualified(entry string) bool {
+	if len(entry) < 2 || entry[1] != ':' {
+		return false
+	}
+	c := entry[0]
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 // buildIncludedExtensions normalizes the configured script extensions to
@@ -41,15 +100,17 @@ func buildIncludedExtensions(cfg Config) map[string]bool {
 func FindScripts(root string, cfg Config) []string {
 	var scripts []string
 
-	ignoredDirs := buildIgnoredDirs(cfg)
+	ex := buildExclusions(cfg)
 	includedExtensions := buildIncludedExtensions(cfg)
-	findScriptsWalk(root, &scripts, ignoredDirs, includedExtensions)
+	findScriptsWalk(root, "", &scripts, ex, includedExtensions)
 	sort.Strings(scripts)
 	return scripts
 }
 
-// findScriptsWalk does the actual recursion with prebuilt lookup sets.
-func findScriptsWalk(dir string, scripts *[]string, ignoredDirs, includedExtensions map[string]bool) {
+// findScriptsWalk does the actual recursion with prebuilt lookup sets. rel is
+// dir's slash-separated path relative to the scan root ("" at the root) and is
+// used to match root-relative exclusion entries.
+func findScriptsWalk(dir, rel string, scripts *[]string, ex exclusions, includedExtensions map[string]bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		// Silently skip directories that cannot be read
@@ -61,9 +122,20 @@ func findScriptsWalk(dir string, scripts *[]string, ignoredDirs, includedExtensi
 		fullPath := filepath.Join(dir, name)
 
 		if entry.IsDir() {
-			if !ignoredDirs[strings.ToLower(name)] {
-				findScriptsWalk(fullPath, scripts, ignoredDirs, includedExtensions)
+			if ex.names[strings.ToLower(name)] {
+				continue
 			}
+			childRel := ""
+			if len(ex.paths) > 0 {
+				childRel = name
+				if rel != "" {
+					childRel = rel + "/" + name
+				}
+				if ex.paths[strings.ToLower(childRel)] {
+					continue
+				}
+			}
+			findScriptsWalk(fullPath, childRel, scripts, ex, includedExtensions)
 			continue
 		}
 

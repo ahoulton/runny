@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -213,6 +214,208 @@ func TestExcludedDirsCaseInsensitive(t *testing.T) {
 
 	if got := core.FindScripts(scriptDir, cfg); len(got) != 0 {
 		t.Fatalf("case-insensitive exclusion failed, found: %v", got)
+	}
+}
+
+// TestExcludedDirsRelativePath checks that an excluded_dirs entry containing a
+// separator is matched against the directory's path relative to the scan root:
+// it skips that subtree (and only that one), while bare names keep matching at
+// any depth.
+func TestExcludedDirsRelativePath(t *testing.T) {
+	dir := t.TempDir()
+	scriptDir := filepath.Join(dir, "scripts")
+	for _, p := range []string{
+		"redirect/core",
+		"redirect/core/child",
+		"redirect/other",
+		"other/core",
+		"other/node_modules",
+	} {
+		if err := os.MkdirAll(filepath.Join(scriptDir, filepath.FromSlash(p)), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, p := range []string{
+		"top.py",
+		"redirect/core/in_core.py",
+		"redirect/core/child/in_child.py",
+		"redirect/other/in_other.py",
+		"other/core/in_other_core.py",
+		"other/node_modules/in_nm.py",
+	} {
+		if err := os.WriteFile(filepath.Join(scriptDir, filepath.FromSlash(p)), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeConfigFile(t, dir,
+		`{"search_directory": "`+filepath.ToSlash(scriptDir)+`",`+
+			`"excluded_dirs": ["redirect/core", "node_modules"]}`)
+	cfg := core.LoadConfig(dir)
+
+	have := map[string]bool{}
+	for _, s := range core.FindScripts(scriptDir, cfg) {
+		rel, err := filepath.Rel(scriptDir, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		have[filepath.ToSlash(rel)] = true
+	}
+
+	for _, must := range []string{
+		"top.py",
+		"redirect/other/in_other.py",
+		"other/core/in_other_core.py",
+	} {
+		if !have[must] {
+			t.Errorf("%s missing: a relative path entry must not exclude same-named dirs elsewhere (have %v)", must, have)
+		}
+	}
+	for _, banned := range []string{
+		"redirect/core/in_core.py",
+		"redirect/core/child/in_child.py",
+		"other/node_modules/in_nm.py",
+	} {
+		if have[banned] {
+			t.Errorf("%s must stay excluded (have %v)", banned, have)
+		}
+	}
+}
+
+// TestExcludedDirsRelativePathNormalized checks that path entries accept
+// either separator, a leading "./", a trailing separator, and mixed case.
+func TestExcludedDirsRelativePathNormalized(t *testing.T) {
+	dir := t.TempDir()
+	scriptDir := filepath.Join(dir, "scripts")
+	for _, p := range []string{"Redirect/Core", "Redirect/Keep", "Other/Core"} {
+		if err := os.MkdirAll(filepath.Join(scriptDir, filepath.FromSlash(p)), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, p := range []string{
+		"Redirect/Core/in_core.py",
+		"Redirect/Keep/in_keep.py",
+		"Other/Core/in_other_core.py",
+	} {
+		if err := os.WriteFile(filepath.Join(scriptDir, filepath.FromSlash(p)), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg := core.LoadConfig(dir)
+	cfg.SearchDirectory = scriptDir
+	cfg.ExcludedDirs = []string{`.\Redirect\CORE\`}
+
+	have := map[string]bool{}
+	for _, s := range core.FindScripts(scriptDir, cfg) {
+		rel, err := filepath.Rel(scriptDir, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		have[filepath.ToSlash(rel)] = true
+	}
+
+	if have["Redirect/Core/in_core.py"] {
+		t.Errorf("normalized path entry did not exclude Redirect/Core (have %v)", have)
+	}
+	for _, must := range []string{"Redirect/Keep/in_keep.py", "Other/Core/in_other_core.py"} {
+		if !have[must] {
+			t.Errorf("%s missing: path entry must match only its relative path (have %v)", must, have)
+		}
+	}
+}
+
+// discoversScript reports whether FindScripts finds script when scanning
+// scriptDir with the given excluded_dirs. It goes through LoadConfig so the
+// config path (defaults, normalization) is exercised, not just FindScripts.
+func discoversScript(t *testing.T, configDir, scriptDir, script string, excluded []string) bool {
+	t.Helper()
+	cfg := core.LoadConfig(configDir)
+	cfg.SearchDirectory = scriptDir
+	cfg.ExcludedDirs = excluded
+	for _, s := range core.FindScripts(scriptDir, cfg) {
+		if filepath.Clean(s) == filepath.Clean(script) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestExcludedDirsAbsolutePathIgnored checks that absolute path entries are
+// dropped rather than re-anchored to the scan root: "/redirect/core" (POSIX),
+// `\redirect\core` (Windows) and drive-qualified "D:/redirect/core" must not
+// exclude scripts/redirect/core, while the relative form of the same path
+// still does.
+func TestExcludedDirsAbsolutePathIgnored(t *testing.T) {
+	dir := t.TempDir()
+	scriptDir := filepath.Join(dir, "scripts")
+	script := filepath.Join(scriptDir, "redirect", "core", "in_core.py")
+	if err := os.MkdirAll(filepath.Dir(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, entry := range []string{
+		"/redirect/core",
+		`\redirect\core`,
+		"//redirect/core",
+		"D:/redirect/core",
+		`D:\redirect\core`,
+		"d:/redirect/core",
+	} {
+		if !discoversScript(t, dir, scriptDir, script, []string{entry}) {
+			t.Errorf("absolute entry %q must not exclude redirect/core: it cannot match a path relative to the scan root", entry)
+		}
+	}
+	if discoversScript(t, dir, scriptDir, script, []string{"redirect/core"}) {
+		t.Errorf("relative entry redirect/core must still exclude redirect/core")
+	}
+}
+
+// TestExcludedDirsDriveQualifiedIgnored checks the POSIX corner of the same
+// rule: "D:" is a legal directory name there, so drive-qualified entries must
+// stay unmatched instead of excluding <search_directory>/D:/redirect/core (a
+// relative path) or <search_directory>/D:x (a bare name). The "./" prefix opts
+// back in to those literal paths.
+func TestExcludedDirsDriveQualifiedIgnored(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip(`a directory literally named "D:" cannot be created on Windows`)
+	}
+
+	dir := t.TempDir()
+	scriptDir := filepath.Join(dir, "scripts")
+	// nested: matched through the path branch; D:x has no separator, so it is
+	// only reachable through the name branch.
+	nested := filepath.Join(scriptDir, "D:", "redirect", "core", "in_core.py")
+	bare := filepath.Join(scriptDir, "D:x", "in_bare.py")
+	for _, p := range []string{nested, bare} {
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, tc := range []struct{ entry, script string }{
+		{"D:/redirect/core", nested},
+		{`D:\redirect\core`, nested},
+		{"D:x", bare},
+		{"d:x", bare},
+	} {
+		if !discoversScript(t, dir, scriptDir, tc.script, []string{tc.entry}) {
+			t.Errorf("drive-qualified entry %q must be ignored, not matched", tc.entry)
+		}
+	}
+	for _, tc := range []struct{ entry, script string }{
+		{"./D:/redirect/core", nested},
+		{"./D:x", bare},
+	} {
+		if discoversScript(t, dir, scriptDir, tc.script, []string{tc.entry}) {
+			t.Errorf("%q must still exclude the literal drive-like directory", tc.entry)
+		}
 	}
 }
 
