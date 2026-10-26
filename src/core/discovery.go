@@ -49,13 +49,30 @@ func buildExclusions(cfg Config) exclusions {
 // never excluded. Absolute entries (POSIX "/x", Windows "\x" or "//host/share")
 // are unsupported and dropped too: they cannot match a path relative to the
 // scan root, and stripping the leading separator would silently re-anchor them
-// to search_directory, hiding a subtree the user did not name.
+// to search_directory, hiding a subtree the user did not name. Drive-qualified
+// entries ("D:/x", "D:\x", "D:x") are dropped for the same reason: on POSIX
+// "D:" is a legal directory name, so "D:/x" would otherwise exclude
+// <search_directory>/D:/x. Prefixing such an entry with "./" opts back in.
 func normalizeExcludedPath(entry string) string {
+	if isDriveQualified(entry) {
+		return ""
+	}
 	p := path.Clean(strings.ReplaceAll(entry, `\`, "/"))
 	if p == "" || p == "." || p == ".." || strings.HasPrefix(p, "/") {
 		return ""
 	}
 	return strings.ToLower(p)
+}
+
+// isDriveQualified reports whether entry begins with a Windows drive prefix: a
+// letter followed by a colon. Checked on the raw entry, so "./D:/x" is not
+// drive-qualified and stays usable as a root-relative path.
+func isDriveQualified(entry string) bool {
+	if len(entry) < 2 || entry[1] != ':' {
+		return false
+	}
+	c := entry[0]
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 // buildIncludedExtensions normalizes the configured script extensions to

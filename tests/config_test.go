@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -324,40 +325,79 @@ func TestExcludedDirsRelativePathNormalized(t *testing.T) {
 	}
 }
 
+// discoversScript reports whether FindScripts finds script when scanning
+// scriptDir with the given excluded_dirs. It goes through LoadConfig so the
+// config path (defaults, normalization) is exercised, not just FindScripts.
+func discoversScript(t *testing.T, configDir, scriptDir, script string, excluded []string) bool {
+	t.Helper()
+	cfg := core.LoadConfig(configDir)
+	cfg.SearchDirectory = scriptDir
+	cfg.ExcludedDirs = excluded
+	for _, s := range core.FindScripts(scriptDir, cfg) {
+		if filepath.Clean(s) == filepath.Clean(script) {
+			return true
+		}
+	}
+	return false
+}
+
 // TestExcludedDirsAbsolutePathIgnored checks that absolute path entries are
-// dropped rather than re-anchored to the scan root: "/redirect/core" (POSIX)
-// and `\redirect\core` (Windows) must not exclude scripts/redirect/core, while
-// the relative form of the same path still does.
+// dropped rather than re-anchored to the scan root: "/redirect/core" (POSIX),
+// `\redirect\core` (Windows) and drive-qualified "D:/redirect/core" must not
+// exclude scripts/redirect/core, while the relative form of the same path
+// still does.
 func TestExcludedDirsAbsolutePathIgnored(t *testing.T) {
 	dir := t.TempDir()
 	scriptDir := filepath.Join(dir, "scripts")
-	if err := os.MkdirAll(filepath.Join(scriptDir, "redirect", "core"), 0755); err != nil {
+	script := filepath.Join(scriptDir, "redirect", "core", "in_core.py")
+	if err := os.MkdirAll(filepath.Dir(script), 0755); err != nil {
 		t.Fatal(err)
 	}
-	script := filepath.Join(scriptDir, "redirect", "core", "in_core.py")
 	if err := os.WriteFile(script, []byte(""), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	discovered := func(excluded []string) bool {
-		cfg := core.LoadConfig(dir)
-		cfg.SearchDirectory = scriptDir
-		cfg.ExcludedDirs = excluded
-		for _, s := range core.FindScripts(scriptDir, cfg) {
-			if filepath.Clean(s) == filepath.Clean(script) {
-				return true
-			}
-		}
-		return false
-	}
-
-	for _, entry := range []string{"/redirect/core", `\redirect\core`, "//redirect/core"} {
-		if !discovered([]string{entry}) {
+	for _, entry := range []string{
+		"/redirect/core",
+		`\redirect\core`,
+		"//redirect/core",
+		"D:/redirect/core",
+		`D:\redirect\core`,
+		"d:/redirect/core",
+	} {
+		if !discoversScript(t, dir, scriptDir, script, []string{entry}) {
 			t.Errorf("absolute entry %q must not exclude redirect/core: it cannot match a path relative to the scan root", entry)
 		}
 	}
-	if discovered([]string{"redirect/core"}) {
+	if discoversScript(t, dir, scriptDir, script, []string{"redirect/core"}) {
 		t.Errorf("relative entry redirect/core must still exclude redirect/core")
+	}
+}
+
+// TestExcludedDirsDriveQualifiedIgnored checks the POSIX corner of the same
+// rule: "D:" is a legal directory name there, so a drive-qualified entry must
+// stay unmatched instead of excluding <search_directory>/D:/redirect/core. The
+// "./" prefix opts back in to that literal path.
+func TestExcludedDirsDriveQualifiedIgnored(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip(`a directory literally named "D:" cannot be created on Windows`)
+	}
+
+	dir := t.TempDir()
+	scriptDir := filepath.Join(dir, "scripts")
+	script := filepath.Join(scriptDir, "D:", "redirect", "core", "in_core.py")
+	if err := os.MkdirAll(filepath.Dir(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !discoversScript(t, dir, scriptDir, script, []string{"D:/redirect/core"}) {
+		t.Errorf(`drive-qualified entry "D:/redirect/core" must be ignored, not matched as a relative path`)
+	}
+	if discoversScript(t, dir, scriptDir, script, []string{"./D:/redirect/core"}) {
+		t.Errorf(`"./D:/redirect/core" must still exclude the literal D: directory`)
 	}
 }
 
