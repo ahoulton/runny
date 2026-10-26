@@ -22,6 +22,11 @@ type exclusions struct {
 // Matching is case-insensitive, matching the previous hardcoded map behavior
 // (which listed both "Lib" and "lib"), and path entries accept either
 // separator.
+//
+// Absolute and drive-qualified entries are unsupported and dropped before
+// classification, so they match nothing rather than being re-anchored to
+// search_directory or matched as a name. This runs before the separator test
+// because "D:x" is drive-relative but contains no separator.
 func buildExclusions(cfg Config) exclusions {
 	ex := exclusions{
 		names: make(map[string]bool, len(cfg.ExcludedDirs)),
@@ -29,7 +34,7 @@ func buildExclusions(cfg Config) exclusions {
 	}
 	for _, entry := range cfg.ExcludedDirs {
 		entry = strings.TrimSpace(entry)
-		if entry == "" {
+		if entry == "" || isDriveQualified(entry) {
 			continue
 		}
 		if strings.ContainsAny(entry, `/\`) {
@@ -50,13 +55,9 @@ func buildExclusions(cfg Config) exclusions {
 // are unsupported and dropped too: they cannot match a path relative to the
 // scan root, and stripping the leading separator would silently re-anchor them
 // to search_directory, hiding a subtree the user did not name. Drive-qualified
-// entries ("D:/x", "D:\x", "D:x") are dropped for the same reason: on POSIX
-// "D:" is a legal directory name, so "D:/x" would otherwise exclude
-// <search_directory>/D:/x. Prefixing such an entry with "./" opts back in.
+// entries never reach here — buildExclusions drops them, including the
+// separator-less "D:x" form. Prefixing such an entry with "./" opts back in.
 func normalizeExcludedPath(entry string) string {
-	if isDriveQualified(entry) {
-		return ""
-	}
 	p := path.Clean(strings.ReplaceAll(entry, `\`, "/"))
 	if p == "" || p == "." || p == ".." || strings.HasPrefix(p, "/") {
 		return ""
@@ -65,8 +66,9 @@ func normalizeExcludedPath(entry string) string {
 }
 
 // isDriveQualified reports whether entry begins with a Windows drive prefix: a
-// letter followed by a colon. Checked on the raw entry, so "./D:/x" is not
-// drive-qualified and stays usable as a root-relative path.
+// letter followed by a colon, with or without a following separator ("D:/x",
+// "D:\x", "D:x"). Checked on the raw entry, so "./D:/x" is not drive-qualified
+// and stays usable as a root-relative path.
 func isDriveQualified(entry string) bool {
 	if len(entry) < 2 || entry[1] != ':' {
 		return false

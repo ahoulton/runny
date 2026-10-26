@@ -375,9 +375,10 @@ func TestExcludedDirsAbsolutePathIgnored(t *testing.T) {
 }
 
 // TestExcludedDirsDriveQualifiedIgnored checks the POSIX corner of the same
-// rule: "D:" is a legal directory name there, so a drive-qualified entry must
-// stay unmatched instead of excluding <search_directory>/D:/redirect/core. The
-// "./" prefix opts back in to that literal path.
+// rule: "D:" is a legal directory name there, so drive-qualified entries must
+// stay unmatched instead of excluding <search_directory>/D:/redirect/core (a
+// relative path) or <search_directory>/D:x (a bare name). The "./" prefix opts
+// back in to those literal paths.
 func TestExcludedDirsDriveQualifiedIgnored(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip(`a directory literally named "D:" cannot be created on Windows`)
@@ -385,19 +386,36 @@ func TestExcludedDirsDriveQualifiedIgnored(t *testing.T) {
 
 	dir := t.TempDir()
 	scriptDir := filepath.Join(dir, "scripts")
-	script := filepath.Join(scriptDir, "D:", "redirect", "core", "in_core.py")
-	if err := os.MkdirAll(filepath.Dir(script), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(script, []byte(""), 0644); err != nil {
-		t.Fatal(err)
+	// nested: matched through the path branch; D:x has no separator, so it is
+	// only reachable through the name branch.
+	nested := filepath.Join(scriptDir, "D:", "redirect", "core", "in_core.py")
+	bare := filepath.Join(scriptDir, "D:x", "in_bare.py")
+	for _, p := range []string{nested, bare} {
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	if !discoversScript(t, dir, scriptDir, script, []string{"D:/redirect/core"}) {
-		t.Errorf(`drive-qualified entry "D:/redirect/core" must be ignored, not matched as a relative path`)
+	for _, tc := range []struct{ entry, script string }{
+		{"D:/redirect/core", nested},
+		{`D:\redirect\core`, nested},
+		{"D:x", bare},
+		{"d:x", bare},
+	} {
+		if !discoversScript(t, dir, scriptDir, tc.script, []string{tc.entry}) {
+			t.Errorf("drive-qualified entry %q must be ignored, not matched", tc.entry)
+		}
 	}
-	if discoversScript(t, dir, scriptDir, script, []string{"./D:/redirect/core"}) {
-		t.Errorf(`"./D:/redirect/core" must still exclude the literal D: directory`)
+	for _, tc := range []struct{ entry, script string }{
+		{"./D:/redirect/core", nested},
+		{"./D:x", bare},
+	} {
+		if discoversScript(t, dir, scriptDir, tc.script, []string{tc.entry}) {
+			t.Errorf("%q must still exclude the literal drive-like directory", tc.entry)
+		}
 	}
 }
 
