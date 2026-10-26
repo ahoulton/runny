@@ -46,11 +46,13 @@ func buildExclusions(cfg Config) exclusions {
 // normalizeExcludedPath converts a root-relative excluded path to the form
 // used during the walk: forward slashes, no "." segments or trailing slash,
 // lowercase. Empty and root-only entries are dropped; the scan root itself is
-// never excluded.
+// never excluded. Absolute entries (POSIX "/x", Windows "\x" or "//host/share")
+// are unsupported and dropped too: they cannot match a path relative to the
+// scan root, and stripping the leading separator would silently re-anchor them
+// to search_directory, hiding a subtree the user did not name.
 func normalizeExcludedPath(entry string) string {
 	p := path.Clean(strings.ReplaceAll(entry, `\`, "/"))
-	p = strings.TrimPrefix(p, "/")
-	if p == "" || p == "." {
+	if p == "" || p == "." || p == ".." || strings.HasPrefix(p, "/") {
 		return ""
 	}
 	return strings.ToLower(p)

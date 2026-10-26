@@ -324,6 +324,43 @@ func TestExcludedDirsRelativePathNormalized(t *testing.T) {
 	}
 }
 
+// TestExcludedDirsAbsolutePathIgnored checks that absolute path entries are
+// dropped rather than re-anchored to the scan root: "/redirect/core" (POSIX)
+// and `\redirect\core` (Windows) must not exclude scripts/redirect/core, while
+// the relative form of the same path still does.
+func TestExcludedDirsAbsolutePathIgnored(t *testing.T) {
+	dir := t.TempDir()
+	scriptDir := filepath.Join(dir, "scripts")
+	if err := os.MkdirAll(filepath.Join(scriptDir, "redirect", "core"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(scriptDir, "redirect", "core", "in_core.py")
+	if err := os.WriteFile(script, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	discovered := func(excluded []string) bool {
+		cfg := core.LoadConfig(dir)
+		cfg.SearchDirectory = scriptDir
+		cfg.ExcludedDirs = excluded
+		for _, s := range core.FindScripts(scriptDir, cfg) {
+			if filepath.Clean(s) == filepath.Clean(script) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, entry := range []string{"/redirect/core", `\redirect\core`, "//redirect/core"} {
+		if !discovered([]string{entry}) {
+			t.Errorf("absolute entry %q must not exclude redirect/core: it cannot match a path relative to the scan root", entry)
+		}
+	}
+	if discovered([]string{"redirect/core"}) {
+		t.Errorf("relative entry redirect/core must still exclude redirect/core")
+	}
+}
+
 // TestSavePreservesOptionsAndUpdatesSearchDir checks that re-picking a
 // directory never wipes user options, and adds them for a from-scratch config.
 func TestSavePreservesOptionsAndUpdatesSearchDir(t *testing.T) {
