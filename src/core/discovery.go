@@ -94,8 +94,9 @@ func buildIncludedExtensions(cfg Config) map[string]bool {
 	return m
 }
 
-// FindScripts recursively discovers Python scripts in the given root directory
-// (per the config's excluded dirs and included extensions).
+// FindScripts walks root recursively via filepath.WalkDir, skipping
+// directories that match the config's excluded_dirs rules (see buildExclusions)
+// and collecting files whose extension is in included_extensions.
 // Returns a sorted list of absolute paths.
 func FindScripts(root string, cfg Config) []string {
 	var scripts []string
