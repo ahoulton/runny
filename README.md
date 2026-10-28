@@ -67,6 +67,7 @@ runny --unregister          # remove those associations (Windows only)
     "python_executable": "",
     "auto_refresh": true
 }
+```
 
 | Field | Meaning |
 |---|---|

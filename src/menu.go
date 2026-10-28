@@ -63,11 +63,35 @@ func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string
 			return "", false
 		case ActionRefresh:
 			if !autoRefresh {
+				var prevSelected string
+				if selectedIndex >= 0 && selectedIndex < len(filtered) {
+					prevSelected = filtered[selectedIndex]
+				}
 				scripts = core.FindScripts(displayRoot, cfg)
+				if prevSelected != "" {
+					for i, s := range filterScripts(scripts, query) {
+						if s == prevSelected {
+							selectedIndex = i
+							break
+						}
+					}
+				}
 			}
 		case ActionAutoRefresh:
-			if autoRefresh && kp.Scripts != nil {
+			if autoRefresh {
+				var prevSelected string
+				if selectedIndex >= 0 && selectedIndex < len(filtered) {
+					prevSelected = filtered[selectedIndex]
+				}
 				scripts = kp.Scripts
+				if prevSelected != "" {
+					for i, s := range filterScripts(scripts, query) {
+						if s == prevSelected {
+							selectedIndex = i
+							break
+						}
+					}
+				}
 			}
 		case ActionBackspace:
 			if len(query) > 0 {
@@ -84,34 +108,44 @@ func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string
 	}
 }
 
-// startAutoRefresh starts a background worker that polls for script changes every 2 seconds.
+// startAutoRefresh starts a background worker that polls for script changes.
+// Scans are scheduled 2 seconds after the previous scan finishes to avoid back-to-back runs.
+// Stopping the worker signals the quit channel without blocking menu exit.
 func startAutoRefresh(displayRoot string, cfg core.Config, initial []string) func() {
 	quit := make(chan struct{})
-	done := make(chan struct{})
 
 	go func() {
-		defer close(done)
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
+		timer := time.NewTimer(2 * time.Second)
+		defer timer.Stop()
 
 		knownScripts := initial
 		for {
 			select {
 			case <-quit:
 				return
-			case <-ticker.C:
-				newScripts := core.FindScripts(displayRoot, cfg)
-				if !slices.Equal(knownScripts, newScripts) {
-					s := screen
-					if s == nil {
-						return
-					}
-					err := s.PostEvent(tcell.NewEventInterrupt(refreshScriptsEvent{scripts: newScripts}))
-					if err == nil {
-						knownScripts = newScripts
-					}
+			case <-timer.C:
+			}
+
+			newScripts := core.FindScripts(displayRoot, cfg)
+
+			select {
+			case <-quit:
+				return
+			default:
+			}
+
+			if !slices.Equal(knownScripts, newScripts) {
+				s := screen
+				if s == nil {
+					return
+				}
+				err := s.PostEvent(tcell.NewEventInterrupt(refreshScriptsEvent{scripts: newScripts}))
+				if err == nil {
+					knownScripts = newScripts
 				}
 			}
+
+			timer.Reset(2 * time.Second)
 		}
 	}()
 
@@ -119,7 +153,6 @@ func startAutoRefresh(displayRoot string, cfg core.Config, initial []string) fun
 	return func() {
 		once.Do(func() {
 			close(quit)
-			<-done
 		})
 	}
 }
