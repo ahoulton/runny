@@ -34,7 +34,7 @@ Run the binary with no arguments to start the launcher.
 |---|---|
 | `↑` / `↓` | Move selection |
 | `Enter` | Run the selected script |
-| `F5` | Refresh — re-scan for scripts created or deleted while the menu is open |
+| `F5` | Refresh — re-scan for scripts created or deleted while the menu is open (only available when auto_refresh is disabled) |
 | type | Filter by filename |
 | `Backspace` | Delete a filter character |
 | `Esc` / `Ctrl+C` | Exit |
@@ -64,9 +64,9 @@ runny --unregister          # remove those associations (Windows only)
     "excluded_dirs": [".venv", "venv", "env", ".env", "Lib", "lib", "site-packages", "__pycache__", ".git"],
     "included_extensions": [".py", ".pyw"],
     "venv_dir": ".venv",
-    "python_executable": ""
+    "python_executable": "",
+    "auto_refresh": true
 }
-```
 
 | Field | Meaning |
 |---|---|
@@ -75,7 +75,7 @@ runny --unregister          # remove those associations (Windows only)
 | `included_extensions` | Extensions discovered (`.py`/`.pyw` by default). |
 | `venv_dir` | Virtual environment directory name searched for when resolving Python. |
 | `python_executable` | When set, used verbatim for every script and disables venv/system detection. |
-
+| `auto_refresh` | Automatically refresh the script list in the background (default true). When true, manual F5 refresh is removed; when false, background auto-refresh is disabled and F5 manual refresh is used. |
 Interpreter resolution walks upward from the script's directory (up to the executable's directory) looking for `<venv_dir>`, then falls back to `python`/`python3`.
 
 ## Build from source

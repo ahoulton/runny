@@ -61,6 +61,9 @@ func TestDefaultsAppliedWhenConfigMissing(t *testing.T) {
 	if cfg.PythonExecutable != "" {
 		t.Fatalf("PythonExecutable = %q, want empty (auto-detect)", cfg.PythonExecutable)
 	}
+	if cfg.AutoRefresh == nil || !*cfg.AutoRefresh {
+		t.Fatalf("AutoRefresh = %v, want true", cfg.AutoRefresh)
+	}
 
 	// No config file should be created just by loading.
 	if _, err := os.Stat(filepath.Join(dir, "runny_config.json")); !os.IsNotExist(err) {
@@ -83,7 +86,7 @@ func TestOldConfigAutoUpgradesOnDisk(t *testing.T) {
 	cfg := core.LoadConfig(dir)
 
 	// In memory: full defaults
-	if cfg.VenvDir != core.DefaultVenvDir || len(cfg.IncludedExtensions) == 0 || len(cfg.ExcludedDirs) == 0 {
+	if cfg.VenvDir != core.DefaultVenvDir || len(cfg.IncludedExtensions) == 0 || len(cfg.ExcludedDirs) == 0 || cfg.AutoRefresh == nil || !*cfg.AutoRefresh {
 		t.Fatalf("defaults not applied in memory: %+v", cfg)
 	}
 	if cfg.SearchDirectory != scriptDir {
@@ -95,7 +98,7 @@ func TestOldConfigAutoUpgradesOnDisk(t *testing.T) {
 	if disk.SearchDirectory != filepath.ToSlash(scriptDir) {
 		t.Fatalf("upgrade must preserve search_directory on disk, got %q", disk.SearchDirectory)
 	}
-	if disk.VenvDir != core.DefaultVenvDir || len(disk.ExcludedDirs) == 0 || len(disk.IncludedExtensions) == 0 {
+	if disk.VenvDir != core.DefaultVenvDir || len(disk.ExcludedDirs) == 0 || len(disk.IncludedExtensions) == 0 || disk.AutoRefresh == nil || !*disk.AutoRefresh {
 		t.Fatalf("config file not upgraded with defaults:\n%s", mustReadAll(t, configPath))
 	}
 
@@ -473,14 +476,15 @@ func TestSaveCreatesConfigWithFullOptions(t *testing.T) {
 // with all fields to runny_config.json.
 func TestSaveConfigDirect(t *testing.T) {
 	dir := t.TempDir()
+	autoRefreshVal := false
 	cfg := core.Config{
 		SearchDirectory:    filepath.ToSlash(filepath.Join(dir, "scripts")),
 		ExcludedDirs:       []string{"custom_skip"},
 		IncludedExtensions: []string{".py"},
 		VenvDir:            "custom_venv",
 		PythonExecutable:   "C:/custom/python.exe",
+		AutoRefresh:        &autoRefreshVal,
 	}
-
 	core.SaveConfig(dir, cfg)
 
 	disk := mustParseConfig(t, filepath.Join(dir, "runny_config.json"))
@@ -498,6 +502,9 @@ func TestSaveConfigDirect(t *testing.T) {
 	}
 	if disk.PythonExecutable != "C:/custom/python.exe" {
 		t.Fatalf("PythonExecutable = %q, want %q", disk.PythonExecutable, "C:/custom/python.exe")
+	}
+	if disk.AutoRefresh == nil || *disk.AutoRefresh != false {
+		t.Fatalf("AutoRefresh = %v, want false", disk.AutoRefresh)
 	}
 }
 
@@ -544,6 +551,76 @@ func TestLoadConfigSearchDirPointsToFile(t *testing.T) {
 	if disk.SearchDirectory != filepath.ToSlash(filePath) {
 		t.Fatalf("on-disk search_directory = %q, want %q preserved", disk.SearchDirectory, filepath.ToSlash(filePath))
 	}
+}
+
+// TestAutoRefreshConfig checks that auto_refresh defaults to true when omitted,
+// triggers upgrade on disk with true, and preserves explicit true and false values
+// both in memory and on disk.
+func TestAutoRefreshConfig(t *testing.T) {
+	t.Run("absent key defaults to true and upgrades on disk", func(t *testing.T) {
+		dir := t.TempDir()
+		configPath := writeConfigFile(t, dir, `{
+			"search_directory": "",
+			"excluded_dirs": [".git"],
+			"included_extensions": [".py"],
+			"venv_dir": ".venv",
+			"python_executable": ""
+		}`)
+
+		cfg := core.LoadConfig(dir)
+		if cfg.AutoRefresh == nil || !*cfg.AutoRefresh {
+			t.Fatalf("in-memory AutoRefresh = %v, want true", cfg.AutoRefresh)
+		}
+
+		disk := mustParseConfig(t, configPath)
+		if disk.AutoRefresh == nil || !*disk.AutoRefresh {
+			t.Fatalf("on-disk AutoRefresh = %v, want true", disk.AutoRefresh)
+		}
+	})
+
+	t.Run("explicit false preserved in memory and disk", func(t *testing.T) {
+		dir := t.TempDir()
+		configPath := writeConfigFile(t, dir, `{
+			"search_directory": "",
+			"excluded_dirs": [".git"],
+			"included_extensions": [".py"],
+			"venv_dir": ".venv",
+			"python_executable": "",
+			"auto_refresh": false
+		}`)
+
+		cfg := core.LoadConfig(dir)
+		if cfg.AutoRefresh == nil || *cfg.AutoRefresh != false {
+			t.Fatalf("in-memory AutoRefresh = %v, want false", cfg.AutoRefresh)
+		}
+
+		disk := mustParseConfig(t, configPath)
+		if disk.AutoRefresh == nil || *disk.AutoRefresh != false {
+			t.Fatalf("on-disk AutoRefresh = %v, want false", disk.AutoRefresh)
+		}
+	})
+
+	t.Run("explicit true preserved in memory and disk", func(t *testing.T) {
+		dir := t.TempDir()
+		configPath := writeConfigFile(t, dir, `{
+			"search_directory": "",
+			"excluded_dirs": [".git"],
+			"included_extensions": [".py"],
+			"venv_dir": ".venv",
+			"python_executable": "",
+			"auto_refresh": true
+		}`)
+
+		cfg := core.LoadConfig(dir)
+		if cfg.AutoRefresh == nil || *cfg.AutoRefresh != true {
+			t.Fatalf("in-memory AutoRefresh = %v, want true", cfg.AutoRefresh)
+		}
+
+		disk := mustParseConfig(t, configPath)
+		if disk.AutoRefresh == nil || *disk.AutoRefresh != true {
+			t.Fatalf("on-disk AutoRefresh = %v, want true", disk.AutoRefresh)
+		}
+	})
 }
 
 func mustReadAll(t *testing.T, path string) string {
