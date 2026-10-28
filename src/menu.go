@@ -2,7 +2,10 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
@@ -12,12 +15,15 @@ import (
 
 // chooseScript presents the interactive TUI menu and returns the selected script path.
 // Returns the selected path and true, or empty string and false if the user exits.
-// F5 re-discovers scripts under displayRoot so scripts created or deleted while
-// the menu is open appear or disappear immediately.
 func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string, bool) {
 	initTerminal()
 	defer finiTerminal()
 
+	autoRefresh := cfg.AutoRefresh != nil && *cfg.AutoRefresh
+	if autoRefresh {
+		stop := startAutoRefresh(displayRoot, cfg, scripts)
+		defer stop()
+	}
 	setTerminalTitle("Runny")
 
 	var query string
@@ -36,8 +42,7 @@ func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string
 		}
 
 		// Draw the menu
-		drawMenu(filtered, displayRoot, query, selectedIndex, &scrollOffset)
-
+		drawMenu(filtered, displayRoot, query, selectedIndex, &scrollOffset, autoRefresh)
 		// Wait for key press
 		kp := readKey()
 
@@ -57,7 +62,37 @@ func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string
 		case ActionEsc:
 			return "", false
 		case ActionRefresh:
-			scripts = core.FindScripts(displayRoot, cfg)
+			if !autoRefresh {
+				var prevSelected string
+				if selectedIndex >= 0 && selectedIndex < len(filtered) {
+					prevSelected = filtered[selectedIndex]
+				}
+				scripts = core.FindScripts(displayRoot, cfg)
+				if prevSelected != "" {
+					for i, s := range filterScripts(scripts, query) {
+						if s == prevSelected {
+							selectedIndex = i
+							break
+						}
+					}
+				}
+			}
+		case ActionAutoRefresh:
+			if autoRefresh {
+				var prevSelected string
+				if selectedIndex >= 0 && selectedIndex < len(filtered) {
+					prevSelected = filtered[selectedIndex]
+				}
+				scripts = kp.Scripts
+				if prevSelected != "" {
+					for i, s := range filterScripts(scripts, query) {
+						if s == prevSelected {
+							selectedIndex = i
+							break
+						}
+					}
+				}
+			}
 		case ActionBackspace:
 			if len(query) > 0 {
 				_, size := utf8.DecodeLastRuneInString(query)
@@ -70,6 +105,55 @@ func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string
 			selectedIndex = 0
 			scrollOffset = 0
 		}
+	}
+}
+
+// startAutoRefresh starts a background worker that polls for script changes.
+// Scans are scheduled 2 seconds after the previous scan finishes to avoid back-to-back runs.
+// Stopping the worker signals the quit channel without blocking menu exit.
+func startAutoRefresh(displayRoot string, cfg core.Config, initial []string) func() {
+	quit := make(chan struct{})
+
+	go func() {
+		timer := time.NewTimer(2 * time.Second)
+		defer timer.Stop()
+
+		knownScripts := initial
+		for {
+			select {
+			case <-quit:
+				return
+			case <-timer.C:
+			}
+
+			newScripts := core.FindScripts(displayRoot, cfg)
+
+			select {
+			case <-quit:
+				return
+			default:
+			}
+
+			if !slices.Equal(knownScripts, newScripts) {
+				s := screen
+				if s == nil {
+					return
+				}
+				err := s.PostEvent(tcell.NewEventInterrupt(refreshScriptsEvent{scripts: newScripts}))
+				if err == nil {
+					knownScripts = newScripts
+				}
+			}
+
+			timer.Reset(2 * time.Second)
+		}
+	}()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			close(quit)
+		})
 	}
 }
 
@@ -91,7 +175,7 @@ func filterScripts(scripts []string, query string) []string {
 }
 
 // drawMenu renders the menu to the tcell screen.
-func drawMenu(filtered []string, displayRoot, query string, selectedIndex int, scrollOffset *int) {
+func drawMenu(filtered []string, displayRoot, query string, selectedIndex int, scrollOffset *int, autoRefresh bool) {
 	maxVisible := getMaxVisibleItems()
 
 	// Clamp scroll offset
@@ -108,8 +192,10 @@ func drawMenu(filtered []string, displayRoot, query string, selectedIndex int, s
 
 	// Calculate required terminal width
 	header := "Use UP / DOWN to move, Enter to run, F5 to refresh, Esc to exit."
+	if autoRefresh {
+		header = "Use UP / DOWN to move, Enter to run, Esc to exit."
+	}
 	maxWidth := len(header)
-
 	searchLine := "Search: " + query
 	if query == "" {
 		searchLine = "Type to search..."

@@ -18,6 +18,7 @@ type Config struct {
 	IncludedExtensions []string `json:"included_extensions"`
 	VenvDir            string   `json:"venv_dir"`
 	PythonExecutable   string   `json:"python_executable"`
+	AutoRefresh        *bool    `json:"auto_refresh"`
 }
 
 // DefaultExcludedDirs returns the built-in directory names skipped during
@@ -46,6 +47,9 @@ func DefaultIncludedExtensions() []string {
 // while resolving the Python interpreter.
 const DefaultVenvDir = ".venv"
 
+// DefaultAutoRefresh is whether the script list is automatically refreshed in the background.
+const DefaultAutoRefresh = true
+
 // applyDefaults fills in defaults for any option fields that are absent
 // from the config file, keeping old config files working unchanged.
 func (c *Config) applyDefaults() {
@@ -57,6 +61,10 @@ func (c *Config) applyDefaults() {
 	}
 	if c.VenvDir == "" {
 		c.VenvDir = DefaultVenvDir
+	}
+	if c.AutoRefresh == nil {
+		v := DefaultAutoRefresh
+		c.AutoRefresh = &v
 	}
 	// PythonExecutable intentionally has no default: an empty value means
 	// auto-detect the interpreter (venv walk, then system Python).
@@ -88,9 +96,9 @@ func LoadConfig(dir string) Config {
 	// Auto-upgrade: an old config (or any config missing an option) gets the
 	// newer option keys added with their defaults, once, right here.
 	_, hasPythonExe := raw["python_executable"]
+	_, hasAutoRefresh := raw["auto_refresh"]
 	needsUpgrade := fileExists &&
-		(cfg.ExcludedDirs == nil || len(cfg.IncludedExtensions) == 0 || cfg.VenvDir == "" || !hasPythonExe)
-
+		(cfg.ExcludedDirs == nil || len(cfg.IncludedExtensions) == 0 || cfg.VenvDir == "" || !hasPythonExe || !hasAutoRefresh)
 	cfg.applyDefaults()
 
 	// Convert forward slashes back to OS-specific path

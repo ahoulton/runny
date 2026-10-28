@@ -23,12 +23,18 @@ const (
 	ActionBackspace
 	ActionRefresh
 	ActionChar
+	ActionAutoRefresh
 )
+
+type refreshScriptsEvent struct {
+	scripts []string
+}
 
 // KeyPress holds information about a single key press
 type KeyPress struct {
-	Action KeyAction
-	Char   rune
+	Action  KeyAction
+	Char    rune
+	Scripts []string // non-nil for ActionAutoRefresh
 }
 
 // initTerminal creates and initializes the tcell screen.
@@ -86,6 +92,10 @@ func readKey() KeyPress {
 			case tcell.KeyRune:
 				return KeyPress{Action: ActionChar, Char: ev.Rune()}
 			default:
+			}
+		case *tcell.EventInterrupt:
+			if data, ok := ev.Data().(refreshScriptsEvent); ok {
+				return KeyPress{Action: ActionAutoRefresh, Scripts: data.scripts}
 			}
 		case *tcell.EventResize:
 			screen.Sync()
