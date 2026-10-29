@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -94,18 +95,99 @@ func buildIncludedExtensions(cfg Config) map[string]bool {
 	return m
 }
 
+// FindAllScripts walks each directory in roots recursively via filepath.WalkDir,
+// skipping directories that match the config's excluded_dirs rules (see buildExclusions)
+// and collecting files whose extension is in included_extensions.
+// Returns a deduplicated, sorted list of absolute paths.
+func FindAllScripts(roots []string, cfg Config) []string {
+	var scripts []string
+
+	ex := buildExclusions(cfg)
+	includedExtensions := buildIncludedExtensions(cfg)
+	for _, root := range roots {
+		if root == "" {
+			continue
+		}
+		findScriptsWalk(root, "", &scripts, ex, includedExtensions)
+	}
+	sort.Strings(scripts)
+	return slices.Compact(scripts)
+}
+
 // FindScripts walks root recursively via filepath.WalkDir, skipping
 // directories that match the config's excluded_dirs rules (see buildExclusions)
 // and collecting files whose extension is in included_extensions.
 // Returns a sorted list of absolute paths.
 func FindScripts(root string, cfg Config) []string {
-	var scripts []string
+	if root == "" {
+		return nil
+	}
+	return FindAllScripts([]string{root}, cfg)
+}
 
-	ex := buildExclusions(cfg)
-	includedExtensions := buildIncludedExtensions(cfg)
-	findScriptsWalk(root, "", &scripts, ex, includedExtensions)
-	sort.Strings(scripts)
-	return scripts
+// RootIdentity returns a concise label identifying root among searchRoots.
+// If the base name of root is unique among all searchRoots, it returns the base name.
+// Otherwise, it falls back to the slash-normalized path of root.
+func RootIdentity(root string, searchRoots []string) string {
+	clean := filepath.Clean(root)
+	base := filepath.Base(clean)
+	if base == "." || base == "/" || base == "\\" || strings.HasSuffix(base, ":") {
+		return filepath.ToSlash(clean)
+	}
+	count := 0
+	for _, r := range searchRoots {
+		if r == "" {
+			continue
+		}
+		if strings.EqualFold(filepath.Base(filepath.Clean(r)), base) {
+			count++
+		}
+	}
+	if count > 1 {
+		return filepath.ToSlash(clean)
+	}
+	return base
+}
+
+// GetRelPath returns the relative path of script from the matching search root.
+// When multiple search roots are configured and a relative label collides across
+// roots (e.g. both roots contain tools/build.py), the label is prefixed with the
+// root identity (e.g. "[Python] tools/build.py") so the user can distinguish them.
+// Falls back to the slash-normalized absolute path if script is outside all roots.
+func GetRelPath(script string, searchRoots []string) string {
+	var matchedRoot, relPath string
+	for _, root := range searchRoots {
+		if root == "" {
+			continue
+		}
+		rel, err := filepath.Rel(root, script)
+		if err == nil && !strings.HasPrefix(rel, "..") && rel != "." {
+			matchedRoot = root
+			relPath = filepath.ToSlash(rel)
+			break
+		}
+	}
+	if matchedRoot == "" {
+		return filepath.ToSlash(script)
+	}
+	if len(searchRoots) <= 1 {
+		return relPath
+	}
+
+	// Check if this relative path collides across multiple search roots
+	for _, otherRoot := range searchRoots {
+		if otherRoot == "" || filepath.Clean(otherRoot) == filepath.Clean(matchedRoot) {
+			continue
+		}
+		candidate := filepath.Join(otherRoot, filepath.FromSlash(relPath))
+		if filepath.Clean(candidate) == filepath.Clean(script) {
+			continue
+		}
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return "[" + RootIdentity(matchedRoot, searchRoots) + "] " + relPath
+		}
+	}
+	return relPath
 }
 
 // findScriptsWalk does the actual recursion with prebuilt lookup sets. rel is

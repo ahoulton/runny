@@ -71,7 +71,7 @@ runny --unregister          # remove those associations (Windows only)
 
 | Field | Meaning |
 |---|---|
-| `search_directory` | Root directory scanned for scripts. |
+| `search_directory` | Root directory scanned for scripts (can be a string or a list of directories). |
 | `excluded_dirs` | Directories skipped during discovery: bare names match at any depth, paths such as `redirect/core` match relative to `search_directory`; absolute and drive-qualified paths are ignored. Replaces the built-in list entirely; matching is case-insensitive. |
 | `included_extensions` | Extensions discovered (`.py`/`.pyw` by default). |
 | `venv_dir` | Virtual environment directory name searched for when resolving Python. |

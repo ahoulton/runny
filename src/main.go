@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"runny/src/core"
 	"runny/src/input"
@@ -85,19 +86,19 @@ func main() {
 func mainLoop(originalWidth int) {
 	// Load the configuration (search directory + user options, with defaults)
 	cfg := core.LoadConfig(exeDir)
-	searchRoot := cfg.SearchDirectory
-	if searchRoot == "" {
-		searchRoot = exeDir
+	searchRoots := cfg.SearchDirectory
+	if len(searchRoots) == 0 {
+		searchRoots = core.SearchPaths{exeDir}
 	}
 
 	for {
 		// Discover Python scripts
-		scripts := core.FindScripts(searchRoot, cfg)
+		scripts := core.FindAllScripts(searchRoots, cfg)
 
 		if len(scripts) == 0 {
 			// No scripts found — prompt user to pick a directory
 			clearTerminal()
-			fmt.Printf("No Python scripts found in:\n  %s\n\nPlease select a directory to search.\n", searchRoot)
+			fmt.Printf("No Python scripts found in:\n  %s\n\nPlease select a directory to search.\n", strings.Join(searchRoots, "\n  "))
 
 			newDir := core.PickDirectory()
 			if newDir == "" {
@@ -106,12 +107,12 @@ func mainLoop(originalWidth int) {
 			}
 
 			core.SaveSearchDirectory(exeDir, newDir)
-			searchRoot = newDir
+			searchRoots = core.SearchPaths{newDir}
 			continue
 		}
 
 		// Show the interactive menu
-		selected, ok := chooseScript(scripts, searchRoot, cfg)
+		selected, ok := chooseScript(scripts, searchRoots, cfg)
 		if !ok {
 			fmt.Println("Exiting launcher.")
 			return

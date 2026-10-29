@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -46,8 +47,8 @@ func TestDefaultsAppliedWhenConfigMissing(t *testing.T) {
 
 	cfg := core.LoadConfig(dir)
 
-	if cfg.SearchDirectory != "" {
-		t.Fatalf("SearchDirectory = %q, want empty", cfg.SearchDirectory)
+	if len(cfg.SearchDirectory) != 0 {
+		t.Fatalf("SearchDirectory = %v, want empty", cfg.SearchDirectory)
 	}
 	if cfg.VenvDir != core.DefaultVenvDir {
 		t.Fatalf("VenvDir = %q, want %q", cfg.VenvDir, core.DefaultVenvDir)
@@ -89,14 +90,14 @@ func TestOldConfigAutoUpgradesOnDisk(t *testing.T) {
 	if cfg.VenvDir != core.DefaultVenvDir || len(cfg.IncludedExtensions) == 0 || len(cfg.ExcludedDirs) == 0 || cfg.AutoRefresh == nil || !*cfg.AutoRefresh {
 		t.Fatalf("defaults not applied in memory: %+v", cfg)
 	}
-	if cfg.SearchDirectory != scriptDir {
-		t.Fatalf("SearchDirectory = %q, want %q", cfg.SearchDirectory, scriptDir)
+	if len(cfg.SearchDirectory) != 1 || cfg.SearchDirectory[0] != scriptDir {
+		t.Fatalf("SearchDirectory = %v, want [%q]", cfg.SearchDirectory, scriptDir)
 	}
 
 	// On disk: same search directory, plus the new option keys
 	disk := mustParseConfig(t, configPath)
-	if disk.SearchDirectory != filepath.ToSlash(scriptDir) {
-		t.Fatalf("upgrade must preserve search_directory on disk, got %q", disk.SearchDirectory)
+	if len(disk.SearchDirectory) != 1 || disk.SearchDirectory[0] != filepath.ToSlash(scriptDir) {
+		t.Fatalf("upgrade must preserve search_directory on disk, got %v", disk.SearchDirectory)
 	}
 	if disk.VenvDir != core.DefaultVenvDir || len(disk.ExcludedDirs) == 0 || len(disk.IncludedExtensions) == 0 || disk.AutoRefresh == nil || !*disk.AutoRefresh {
 		t.Fatalf("config file not upgraded with defaults:\n%s", mustReadAll(t, configPath))
@@ -135,13 +136,13 @@ func TestUpgradePreservesMissingSearchDir(t *testing.T) {
 
 	cfg := core.LoadConfig(dir)
 
-	if cfg.SearchDirectory != "" {
-		t.Fatalf("SearchDirectory = %q, want empty for a missing directory", cfg.SearchDirectory)
+	if len(cfg.SearchDirectory) != 0 {
+		t.Fatalf("SearchDirectory = %v, want empty for a missing directory", cfg.SearchDirectory)
 	}
 
 	disk := mustParseConfig(t, configPath)
-	if disk.SearchDirectory != filepath.ToSlash(goneDir) {
-		t.Fatalf("upgrade must not erase an unavailable search_directory, got %q", disk.SearchDirectory)
+	if len(disk.SearchDirectory) != 1 || disk.SearchDirectory[0] != filepath.ToSlash(goneDir) {
+		t.Fatalf("upgrade must not erase an unavailable search_directory, got %v", disk.SearchDirectory)
 	}
 	if len(disk.ExcludedDirs) == 0 || disk.VenvDir != core.DefaultVenvDir {
 		t.Fatalf("upgrade options missing:\n%s", mustReadAll(t, configPath))
@@ -174,7 +175,7 @@ func TestExclusionListFullReplacement(t *testing.T) {
 
 	cfg := core.LoadConfig(dir) // defaults
 	cfg.ExcludedDirs = []string{"node_modules", ".git"}
-	cfg.SearchDirectory = scriptDir
+	cfg.SearchDirectory = core.SearchPaths{scriptDir}
 
 	have := map[string]bool{}
 	for _, s := range core.FindScripts(scriptDir, cfg) {
@@ -212,7 +213,7 @@ func TestExcludedDirsCaseInsensitive(t *testing.T) {
 	}
 
 	cfg := core.LoadConfig(dir)
-	cfg.SearchDirectory = scriptDir
+	cfg.SearchDirectory = core.SearchPaths{scriptDir}
 	cfg.ExcludedDirs = []string{"BUILD", "Logs"}
 
 	if got := core.FindScripts(scriptDir, cfg); len(got) != 0 {
@@ -306,7 +307,7 @@ func TestExcludedDirsRelativePathNormalized(t *testing.T) {
 	}
 
 	cfg := core.LoadConfig(dir)
-	cfg.SearchDirectory = scriptDir
+	cfg.SearchDirectory = core.SearchPaths{scriptDir}
 	cfg.ExcludedDirs = []string{`.\Redirect\CORE\`}
 
 	have := map[string]bool{}
@@ -334,7 +335,7 @@ func TestExcludedDirsRelativePathNormalized(t *testing.T) {
 func discoversScript(t *testing.T, configDir, scriptDir, script string, excluded []string) bool {
 	t.Helper()
 	cfg := core.LoadConfig(configDir)
-	cfg.SearchDirectory = scriptDir
+	cfg.SearchDirectory = core.SearchPaths{scriptDir}
 	cfg.ExcludedDirs = excluded
 	for _, s := range core.FindScripts(scriptDir, cfg) {
 		if filepath.Clean(s) == filepath.Clean(script) {
@@ -439,8 +440,8 @@ func TestSavePreservesOptionsAndUpdatesSearchDir(t *testing.T) {
 	core.SaveSearchDirectory(dir, otherDir)
 
 	disk := mustParseConfig(t, configPath)
-	if disk.SearchDirectory != filepath.ToSlash(otherDir) {
-		t.Fatalf("search_directory not updated, got %q", disk.SearchDirectory)
+	if len(disk.SearchDirectory) != 1 || disk.SearchDirectory[0] != filepath.ToSlash(otherDir) {
+		t.Fatalf("search_directory not updated, got %v", disk.SearchDirectory)
 	}
 	if len(disk.ExcludedDirs) != 1 || disk.ExcludedDirs[0] != "node_modules" {
 		t.Fatalf("excluded_dirs wiped by save: %v", disk.ExcludedDirs)
@@ -464,7 +465,7 @@ func TestSaveCreatesConfigWithFullOptions(t *testing.T) {
 	core.SaveSearchDirectory(dir, filepath.Join(dir, "scripts"))
 
 	disk := mustParseConfig(t, filepath.Join(dir, "runny_config.json"))
-	if disk.SearchDirectory == "" {
+	if len(disk.SearchDirectory) == 0 {
 		t.Fatal("saved search directory missing")
 	}
 	if len(disk.ExcludedDirs) == 0 || len(disk.IncludedExtensions) == 0 || disk.VenvDir != core.DefaultVenvDir {
@@ -478,7 +479,7 @@ func TestSaveConfigDirect(t *testing.T) {
 	dir := t.TempDir()
 	autoRefreshVal := false
 	cfg := core.Config{
-		SearchDirectory:    filepath.ToSlash(filepath.Join(dir, "scripts")),
+		SearchDirectory:    core.SearchPaths{filepath.ToSlash(filepath.Join(dir, "scripts"))},
 		ExcludedDirs:       []string{"custom_skip"},
 		IncludedExtensions: []string{".py"},
 		VenvDir:            "custom_venv",
@@ -488,8 +489,8 @@ func TestSaveConfigDirect(t *testing.T) {
 	core.SaveConfig(dir, cfg)
 
 	disk := mustParseConfig(t, filepath.Join(dir, "runny_config.json"))
-	if disk.SearchDirectory != cfg.SearchDirectory {
-		t.Fatalf("SearchDirectory = %q, want %q", disk.SearchDirectory, cfg.SearchDirectory)
+	if !slices.Equal(disk.SearchDirectory, cfg.SearchDirectory) {
+		t.Fatalf("SearchDirectory = %v, want %v", disk.SearchDirectory, cfg.SearchDirectory)
 	}
 	if len(disk.ExcludedDirs) != 1 || disk.ExcludedDirs[0] != "custom_skip" {
 		t.Fatalf("ExcludedDirs = %v, want %v", disk.ExcludedDirs, cfg.ExcludedDirs)
@@ -516,8 +517,8 @@ func TestLoadConfigMalformedJSON(t *testing.T) {
 
 	cfg := core.LoadConfig(dir)
 
-	if cfg.SearchDirectory != "" {
-		t.Fatalf("SearchDirectory = %q, want empty", cfg.SearchDirectory)
+	if len(cfg.SearchDirectory) != 0 {
+		t.Fatalf("SearchDirectory = %v, want empty", cfg.SearchDirectory)
 	}
 	if cfg.VenvDir != core.DefaultVenvDir {
 		t.Fatalf("VenvDir = %q, want %q", cfg.VenvDir, core.DefaultVenvDir)
@@ -542,15 +543,15 @@ func TestLoadConfigSearchDirPointsToFile(t *testing.T) {
 		`{"search_directory": "`+filepath.ToSlash(filePath)+`"}`)
 
 	cfg := core.LoadConfig(dir)
-
-	if cfg.SearchDirectory != "" {
-		t.Fatalf("SearchDirectory = %q, want empty when pointing to a regular file", cfg.SearchDirectory)
+	if len(cfg.SearchDirectory) != 0 {
+		t.Fatalf("SearchDirectory = %v, want empty when pointing to a regular file", cfg.SearchDirectory)
 	}
 
 	disk := mustParseConfig(t, configPath)
-	if disk.SearchDirectory != filepath.ToSlash(filePath) {
-		t.Fatalf("on-disk search_directory = %q, want %q preserved", disk.SearchDirectory, filepath.ToSlash(filePath))
+	if len(disk.SearchDirectory) != 1 || disk.SearchDirectory[0] != filepath.ToSlash(filePath) {
+		t.Fatalf("on-disk search_directory = %v, want %q preserved", disk.SearchDirectory, filepath.ToSlash(filePath))
 	}
+
 }
 
 // TestAutoRefreshConfig checks that auto_refresh defaults to true when omitted,
@@ -619,6 +620,148 @@ func TestAutoRefreshConfig(t *testing.T) {
 		disk := mustParseConfig(t, configPath)
 		if disk.AutoRefresh == nil || *disk.AutoRefresh != true {
 			t.Fatalf("on-disk AutoRefresh = %v, want true", disk.AutoRefresh)
+		}
+	})
+}
+
+// TestSearchDirectoryListConfig checks that search_directory can be configured as a list
+// of directories in runny_config.json, supporting multiple folders to sync.
+func TestSearchDirectoryListConfig(t *testing.T) {
+	t.Run("multiple existing directories loaded and upgraded", func(t *testing.T) {
+		dir := t.TempDir()
+		dir1 := filepath.Join(dir, "primary")
+		dir2 := filepath.Join(dir, "secondary")
+		if err := os.MkdirAll(dir1, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(dir2, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		// Pre-upgrade config (no auto_refresh or python_executable) with search_directory list
+		configPath := writeConfigFile(t, dir, `{
+			"search_directory": ["`+filepath.ToSlash(dir1)+`", "`+filepath.ToSlash(dir2)+`"]
+		}`)
+
+		cfg := core.LoadConfig(dir)
+
+		// In memory: both directories present with native slashes
+		if len(cfg.SearchDirectory) != 2 {
+			t.Fatalf("SearchDirectory length = %d, want 2: %v", len(cfg.SearchDirectory), cfg.SearchDirectory)
+		}
+		if cfg.SearchDirectory[0] != dir1 || cfg.SearchDirectory[1] != dir2 {
+			t.Fatalf("SearchDirectory = %v, want [%q, %q]", cfg.SearchDirectory, dir1, dir2)
+		}
+
+		// On disk: list preserved during upgrade
+		disk := mustParseConfig(t, configPath)
+		wantDisk := []string{filepath.ToSlash(dir1), filepath.ToSlash(dir2)}
+		if !slices.Equal(disk.SearchDirectory, wantDisk) {
+			t.Fatalf("on-disk search_directory = %v, want %v", disk.SearchDirectory, wantDisk)
+		}
+		if disk.AutoRefresh == nil || !*disk.AutoRefresh {
+			t.Fatalf("auto_refresh not added during upgrade: %s", mustReadAll(t, configPath))
+		}
+	})
+
+	t.Run("partially missing directories kept on disk but filtered in memory", func(t *testing.T) {
+		dir := t.TempDir()
+		dir1 := filepath.Join(dir, "exists")
+		dir2 := filepath.Join(dir, "missing")
+		if err := os.MkdirAll(dir1, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		configPath := writeConfigFile(t, dir, `{
+			"search_directory": ["`+filepath.ToSlash(dir1)+`", "`+filepath.ToSlash(dir2)+`"]
+		}`)
+
+		cfg := core.LoadConfig(dir)
+
+		// In memory: only the existing directory is retained
+		if len(cfg.SearchDirectory) != 1 || cfg.SearchDirectory[0] != dir1 {
+			t.Fatalf("in-memory SearchDirectory = %v, want [%q]", cfg.SearchDirectory, dir1)
+		}
+
+		// On disk: both directories preserved during upgrade write-back
+		disk := mustParseConfig(t, configPath)
+		wantDisk := []string{filepath.ToSlash(dir1), filepath.ToSlash(dir2)}
+		if !slices.Equal(disk.SearchDirectory, wantDisk) {
+			t.Fatalf("on-disk search_directory = %v, want %v", disk.SearchDirectory, wantDisk)
+		}
+	})
+
+	t.Run("all missing directories in list yields empty in memory but preserved on disk", func(t *testing.T) {
+		dir := t.TempDir()
+		dir1 := filepath.Join(dir, "missing1")
+		dir2 := filepath.Join(dir, "missing2")
+
+		configPath := writeConfigFile(t, dir, `{
+			"search_directory": ["`+filepath.ToSlash(dir1)+`", "`+filepath.ToSlash(dir2)+`"]
+		}`)
+
+		cfg := core.LoadConfig(dir)
+
+		if len(cfg.SearchDirectory) != 0 {
+			t.Fatalf("in-memory SearchDirectory = %v, want empty", cfg.SearchDirectory)
+		}
+
+		disk := mustParseConfig(t, configPath)
+		wantDisk := []string{filepath.ToSlash(dir1), filepath.ToSlash(dir2)}
+		if !slices.Equal(disk.SearchDirectory, wantDisk) {
+			t.Fatalf("on-disk search_directory = %v, want %v", disk.SearchDirectory, wantDisk)
+		}
+	})
+
+	t.Run("save search directories persists array", func(t *testing.T) {
+		dir := t.TempDir()
+		dir1 := filepath.Join(dir, "p1")
+		dir2 := filepath.Join(dir, "p2")
+
+		core.SaveSearchDirectories(dir, []string{dir1, dir2})
+
+		disk := mustParseConfig(t, filepath.Join(dir, "runny_config.json"))
+		wantDisk := []string{filepath.ToSlash(dir1), filepath.ToSlash(dir2)}
+		if !slices.Equal(disk.SearchDirectory, wantDisk) {
+			t.Fatalf("on-disk search_directory = %v, want %v", disk.SearchDirectory, wantDisk)
+		}
+	})
+
+	t.Run("configured directory paths with leading or trailing whitespace preserved", func(t *testing.T) {
+		dir := t.TempDir()
+		spaceDir := filepath.Join(dir, " folder with spaces ")
+		if err := os.MkdirAll(spaceDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		// Single string path with whitespace preserved
+		configPath := writeConfigFile(t, dir, `{
+			"search_directory": "`+filepath.ToSlash(spaceDir)+`"
+		}`)
+
+		cfg := core.LoadConfig(dir)
+		if len(cfg.SearchDirectory) != 1 || cfg.SearchDirectory[0] != spaceDir {
+			t.Fatalf("SearchDirectory = %v, want [%q]", cfg.SearchDirectory, spaceDir)
+		}
+
+		disk := mustParseConfig(t, configPath)
+		if len(disk.SearchDirectory) != 1 || disk.SearchDirectory[0] != filepath.ToSlash(spaceDir) {
+			t.Fatalf("on-disk search_directory = %v, want [%q]", disk.SearchDirectory, filepath.ToSlash(spaceDir))
+		}
+
+		// Array representation with whitespace preserved
+		configPath2 := writeConfigFile(t, dir, `{
+			"search_directory": ["`+filepath.ToSlash(spaceDir)+`"]
+		}`)
+
+		cfg2 := core.LoadConfig(dir)
+		if len(cfg2.SearchDirectory) != 1 || cfg2.SearchDirectory[0] != spaceDir {
+			t.Fatalf("SearchDirectory array = %v, want [%q]", cfg2.SearchDirectory, spaceDir)
+		}
+
+		disk2 := mustParseConfig(t, configPath2)
+		if len(disk2.SearchDirectory) != 1 || disk2.SearchDirectory[0] != filepath.ToSlash(spaceDir) {
+			t.Fatalf("on-disk search_directory array = %v, want [%q]", disk2.SearchDirectory, filepath.ToSlash(spaceDir))
 		}
 	})
 }
