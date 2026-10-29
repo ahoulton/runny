@@ -26,7 +26,7 @@ func TestIncludedExtensionsNormalize(t *testing.T) {
 	}
 
 	cfg := core.LoadConfig(dir)
-	cfg.SearchDirectory = scriptDir
+	cfg.SearchDirectory = core.SearchPaths{scriptDir}
 	cfg.IncludedExtensions = []string{" PYW ", ".PYI", "", "   "} // whitespace, no leading dots, mixed case, blanks
 
 	base := map[string]bool{}
@@ -61,7 +61,7 @@ func TestDiscoveryIsRecursiveAndSorted(t *testing.T) {
 	}
 
 	cfg := core.LoadConfig(dir)
-	cfg.SearchDirectory = scriptDir
+	cfg.SearchDirectory = core.SearchPaths{scriptDir}
 	got := core.FindScripts(scriptDir, cfg)
 
 	want := []string{
@@ -262,10 +262,46 @@ func TestFindScriptsDirectoryWithExtensionIgnored(t *testing.T) {
 	}
 
 	cfg := core.LoadConfig(dir)
-	cfg.SearchDirectory = scriptDir
+	cfg.SearchDirectory = core.SearchPaths{scriptDir}
 	got := core.FindScripts(scriptDir, cfg)
 
 	if len(got) != 1 || got[0] != nestedScript {
 		t.Fatalf("FindScripts returned %v, want [%q]", got, nestedScript)
+	}
+}
+
+// TestFindAllScriptsMultipleRoots checks that FindAllScripts discovers scripts across
+// multiple search roots and deduplicates any overlaps.
+func TestFindAllScriptsMultipleRoots(t *testing.T) {
+	dir := t.TempDir()
+	root1 := filepath.Join(dir, "root1")
+	root2 := filepath.Join(dir, "root2")
+	if err := os.MkdirAll(root1, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root2, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	s1 := filepath.Join(root1, "alpha.py")
+	s2 := filepath.Join(root2, "beta.py")
+	if err := os.WriteFile(s1, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s2, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := core.LoadConfig(dir)
+	got := core.FindAllScripts([]string{root1, root2}, cfg)
+	want := []string{s1, s2}
+	if len(got) != 2 || got[0] != s1 || got[1] != s2 {
+		t.Fatalf("FindAllScripts = %v, want %v", got, want)
+	}
+
+	// Overlapping roots check (deduplication)
+	gotOverlap := core.FindAllScripts([]string{root1, root1, root2}, cfg)
+	if len(gotOverlap) != 2 || gotOverlap[0] != s1 || gotOverlap[1] != s2 {
+		t.Fatalf("FindAllScripts deduplication failed: %v", gotOverlap)
 	}
 }

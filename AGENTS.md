@@ -40,7 +40,7 @@ Runny: a Go TUI launcher for Python scripts. Cross-platform: compiles and runs n
 
 - `runny_config.json` is read/written **next to the executable** (`exeDir`), not the working directory. It is gitignored and is not committed: it appears next to the exe on the first directory pick (so building into the repo root creates one there, untracked).
 - Config schema (all fields optional; absent/empty fields fall back to built-in defaults via `applyDefaults` in `src/core/config.go`):
-  - `search_directory` — the launcher's root scan directory (slash-normalized on disk).
+  - `search_directory` — the launcher's root scan directory (or list of directories), slash-normalized on disk.
   - `excluded_dirs` — directories skipped during script discovery: a bare name matches a directory at any depth, while an entry containing a separator (`/` or `\`) matches that path relative to `search_directory` (e.g. `redirect/core`). Absolute and drive-qualified entries (`/x`, `\x`, `//host/share`, `D:/x`, `D:\x`, `D:x`) are unsupported and ignored — never re-anchored to `search_directory` or matched as a name. **Full replacement semantics**: when present it replaces the built-in list entirely; when absent the defaults apply (`.venv`, `venv`, `env`, `.env`, `Lib`, `lib`, `site-packages`, `__pycache__`, `.git`). Matching is case-insensitive and path entries are normalized (see `buildExclusions` in `src/core/discovery.go`).
   - `included_extensions` — file extensions discovered (default `.py`/`.pyw`); normalized to lowercase with a leading dot. Valid for discovery filtering only — Windows file associations in `src/register/` stay `.py`/`.pyw` regardless.
   - `venv_dir` — venv directory name used by `findPythonForScript` (default `.venv`).

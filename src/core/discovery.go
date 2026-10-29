@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -94,18 +95,34 @@ func buildIncludedExtensions(cfg Config) map[string]bool {
 	return m
 }
 
+// FindAllScripts walks each directory in roots recursively via filepath.WalkDir,
+// skipping directories that match the config's excluded_dirs rules (see buildExclusions)
+// and collecting files whose extension is in included_extensions.
+// Returns a deduplicated, sorted list of absolute paths.
+func FindAllScripts(roots []string, cfg Config) []string {
+	var scripts []string
+
+	ex := buildExclusions(cfg)
+	includedExtensions := buildIncludedExtensions(cfg)
+	for _, root := range roots {
+		if root == "" {
+			continue
+		}
+		findScriptsWalk(root, "", &scripts, ex, includedExtensions)
+	}
+	sort.Strings(scripts)
+	return slices.Compact(scripts)
+}
+
 // FindScripts walks root recursively via filepath.WalkDir, skipping
 // directories that match the config's excluded_dirs rules (see buildExclusions)
 // and collecting files whose extension is in included_extensions.
 // Returns a sorted list of absolute paths.
 func FindScripts(root string, cfg Config) []string {
-	var scripts []string
-
-	ex := buildExclusions(cfg)
-	includedExtensions := buildIncludedExtensions(cfg)
-	findScriptsWalk(root, "", &scripts, ex, includedExtensions)
-	sort.Strings(scripts)
-	return scripts
+	if root == "" {
+		return nil
+	}
+	return FindAllScripts([]string{root}, cfg)
 }
 
 // findScriptsWalk does the actual recursion with prebuilt lookup sets. rel is

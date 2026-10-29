@@ -15,13 +15,13 @@ import (
 
 // chooseScript presents the interactive TUI menu and returns the selected script path.
 // Returns the selected path and true, or empty string and false if the user exits.
-func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string, bool) {
+func chooseScript(scripts []string, searchRoots []string, cfg core.Config) (string, bool) {
 	initTerminal()
 	defer finiTerminal()
 
 	autoRefresh := cfg.AutoRefresh != nil && *cfg.AutoRefresh
 	if autoRefresh {
-		stop := startAutoRefresh(displayRoot, cfg, scripts)
+		stop := startAutoRefresh(searchRoots, cfg, scripts)
 		defer stop()
 	}
 	setTerminalTitle("Runny")
@@ -42,7 +42,7 @@ func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string
 		}
 
 		// Draw the menu
-		drawMenu(filtered, displayRoot, query, selectedIndex, &scrollOffset, autoRefresh)
+		drawMenu(filtered, searchRoots, query, selectedIndex, &scrollOffset, autoRefresh)
 		// Wait for key press
 		kp := readKey()
 
@@ -67,7 +67,7 @@ func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string
 				if selectedIndex >= 0 && selectedIndex < len(filtered) {
 					prevSelected = filtered[selectedIndex]
 				}
-				scripts = core.FindScripts(displayRoot, cfg)
+				scripts = core.FindAllScripts(searchRoots, cfg)
 				if prevSelected != "" {
 					for i, s := range filterScripts(scripts, query) {
 						if s == prevSelected {
@@ -111,7 +111,7 @@ func chooseScript(scripts []string, displayRoot string, cfg core.Config) (string
 // startAutoRefresh starts a background worker that polls for script changes.
 // Scans are scheduled 2 seconds after the previous scan finishes to avoid back-to-back runs.
 // Stopping the worker signals the quit channel without blocking menu exit.
-func startAutoRefresh(displayRoot string, cfg core.Config, initial []string) func() {
+func startAutoRefresh(searchRoots []string, cfg core.Config, initial []string) func() {
 	quit := make(chan struct{})
 
 	go func() {
@@ -126,7 +126,7 @@ func startAutoRefresh(displayRoot string, cfg core.Config, initial []string) fun
 			case <-timer.C:
 			}
 
-			newScripts := core.FindScripts(displayRoot, cfg)
+			newScripts := core.FindAllScripts(searchRoots, cfg)
 
 			select {
 			case <-quit:
@@ -175,7 +175,7 @@ func filterScripts(scripts []string, query string) []string {
 }
 
 // drawMenu renders the menu to the tcell screen.
-func drawMenu(filtered []string, displayRoot, query string, selectedIndex int, scrollOffset *int, autoRefresh bool) {
+func drawMenu(filtered []string, searchRoots []string, query string, selectedIndex int, scrollOffset *int, autoRefresh bool) {
 	maxVisible := getMaxVisibleItems()
 
 	// Clamp scroll offset
@@ -207,7 +207,7 @@ func drawMenu(filtered []string, displayRoot, query string, selectedIndex int, s
 	// Check widths of visible items
 	visibleEnd := min(*scrollOffset+maxVisible, len(filtered))
 	for i := *scrollOffset; i < visibleEnd; i++ {
-		relPath := getRelPath(filtered[i], displayRoot)
+		relPath := getRelPath(filtered[i], searchRoots)
 		lineLen := len(relPath) + 2 // for "> " or "  " prefix
 		if lineLen > maxWidth {
 			maxWidth = lineLen
@@ -250,7 +250,7 @@ func drawMenu(filtered []string, displayRoot, query string, selectedIndex int, s
 		}
 
 		for i := *scrollOffset; i < visibleEnd; i++ {
-			relPath := getRelPath(filtered[i], displayRoot)
+			relPath := getRelPath(filtered[i], searchRoots)
 			if i == selectedIndex {
 				drawString(0, row, highlightStyle, "> "+relPath)
 			} else {
@@ -275,12 +275,14 @@ func drawString(x, y int, style tcell.Style, str string) {
 	}
 }
 
-// getRelPath returns the relative path of script from displayRoot.
-// Falls back to the absolute path if Rel fails.
-func getRelPath(script, displayRoot string) string {
-	rel, err := filepath.Rel(displayRoot, script)
-	if err != nil {
-		return script
+// getRelPath returns the relative path of script from the first matching root in searchRoots.
+// Falls back to the absolute path if Rel fails or traverses outside the root.
+func getRelPath(script string, searchRoots []string) string {
+	for _, root := range searchRoots {
+		rel, err := filepath.Rel(root, script)
+		if err == nil && !strings.HasPrefix(rel, "..") && rel != "." {
+			return filepath.ToSlash(rel)
+		}
 	}
-	return filepath.ToSlash(rel)
+	return filepath.ToSlash(script)
 }

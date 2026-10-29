@@ -6,19 +6,67 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ncruces/zenity"
 )
 
+// SearchPaths represents one or more directories to search for scripts.
+// In JSON, it can be unmarshaled from either a single string or an array of strings.
+type SearchPaths []string
+
+// UnmarshalJSON unmarshals either a JSON string or a JSON array of strings into SearchPaths.
+func (s *SearchPaths) UnmarshalJSON(data []byte) error {
+	// Try single string first
+	var single string
+	if err := json.Unmarshal(data, &single); err == nil {
+		single = strings.TrimSpace(single)
+		if single == "" {
+			*s = nil
+		} else {
+			*s = SearchPaths{single}
+		}
+		return nil
+	}
+
+	// Try array of strings
+	var list []string
+	if err := json.Unmarshal(data, &list); err == nil {
+		var paths SearchPaths
+		for _, item := range list {
+			item = strings.TrimSpace(item)
+			if item != "" {
+				paths = append(paths, item)
+			}
+		}
+		*s = paths
+		return nil
+	}
+
+	return fmt.Errorf("search_directory must be a string or list of strings")
+}
+
+// MarshalJSON marshals SearchPaths as a single string if there is at most one path,
+// or as an array of strings if there are multiple paths.
+func (s SearchPaths) MarshalJSON() ([]byte, error) {
+	if len(s) == 0 {
+		return json.Marshal("")
+	}
+	if len(s) == 1 {
+		return json.Marshal(s[0])
+	}
+	return json.Marshal([]string(s))
+}
+
 // Config represents the persistent configuration for Runny.
 type Config struct {
-	SearchDirectory    string   `json:"search_directory"`
-	ExcludedDirs       []string `json:"excluded_dirs"` // names at any depth, or paths relative to SearchDirectory
-	IncludedExtensions []string `json:"included_extensions"`
-	VenvDir            string   `json:"venv_dir"`
-	PythonExecutable   string   `json:"python_executable"`
-	AutoRefresh        *bool    `json:"auto_refresh"`
+	SearchDirectory    SearchPaths `json:"search_directory"`
+	ExcludedDirs       []string    `json:"excluded_dirs"` // names at any depth, or paths relative to SearchDirectory
+	IncludedExtensions []string    `json:"included_extensions"`
+	VenvDir            string      `json:"venv_dir"`
+	PythonExecutable   string      `json:"python_executable"`
+	AutoRefresh        *bool       `json:"auto_refresh"`
 }
 
 // DefaultExcludedDirs returns the built-in directory names skipped during
@@ -91,7 +139,7 @@ func LoadConfig(dir string) Config {
 
 	// Remember the on-disk search_directory so the upgrade write-back below,
 	// and nothing else, loses it when the directory is temporarily missing.
-	savedSearch := cfg.SearchDirectory
+	savedSearch := slices.Clone(cfg.SearchDirectory)
 
 	// Auto-upgrade: an old config (or any config missing an option) gets the
 	// newer option keys added with their defaults, once, right here.
@@ -101,19 +149,20 @@ func LoadConfig(dir string) Config {
 		(cfg.ExcludedDirs == nil || len(cfg.IncludedExtensions) == 0 || cfg.VenvDir == "" || !hasPythonExe || !hasAutoRefresh)
 	cfg.applyDefaults()
 
-	// Convert forward slashes back to OS-specific path
-	nativePath := filepath.FromSlash(cfg.SearchDirectory)
-
-	// Validate that the directory still exists; otherwise fall back to no
-	// saved directory (the launcher will prompt for one).
-	if nativePath != "" {
-		info, err := os.Stat(nativePath)
-		if err != nil || !info.IsDir() {
-			nativePath = ""
+	// Convert forward slashes back to OS-specific path and validate that
+	// directories still exist; otherwise drop them in memory (the launcher will
+	// prompt for one if none remain).
+	var validDirs SearchPaths
+	for _, p := range cfg.SearchDirectory {
+		nativePath := filepath.FromSlash(p)
+		if nativePath != "" {
+			info, err := os.Stat(nativePath)
+			if err == nil && info.IsDir() {
+				validDirs = append(validDirs, nativePath)
+			}
 		}
 	}
-	cfg.SearchDirectory = nativePath
-
+	cfg.SearchDirectory = validDirs
 	if needsUpgrade {
 		upgraded := cfg
 		upgraded.SearchDirectory = savedSearch
@@ -139,12 +188,20 @@ func SaveConfig(dir string, cfg Config) {
 // SaveSearchDirectory updates only the search directory in the config file,
 // keeping all other user options exactly as they currently are on disk.
 func SaveSearchDirectory(dir, searchDir string) {
+	SaveSearchDirectories(dir, []string{searchDir})
+}
+
+// SaveSearchDirectories updates the search directories in the config file,
+// keeping all other user options exactly as they currently are on disk.
+func SaveSearchDirectories(dir string, searchDirs []string) {
 	// Load the on-disk config so custom options survive the save.
 	cfg := LoadConfig(dir)
 
-	// Re-point the search directory even if the saved path was invalid and
-	// LoadConfig dropped it back to defaults.
-	cfg.SearchDirectory = filepath.ToSlash(searchDir)
+	var paths SearchPaths
+	for _, searchDir := range searchDirs {
+		paths = append(paths, filepath.ToSlash(searchDir))
+	}
+	cfg.SearchDirectory = paths
 
 	SaveConfig(dir, cfg)
 }
