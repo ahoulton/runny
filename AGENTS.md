@@ -23,8 +23,8 @@ Runny: a Go TUI launcher for Python scripts. Cross-platform: compiles and runs n
   - Linux: `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./src`
   - Linux ARM64: `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./src`
   - macOS: `GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./src`
-  - Windows: `GOOS=windows GOARCH=amd64 go build -o /dev/null ./src`
-  - Windows ARM64: `GOOS=windows GOARCH=arm64 go build -o /dev/null ./src`
+  - Windows: `GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./src`
+  - Windows ARM64: `GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./src`
 - The app is a TUI (tcell) that takes over the terminal — automated/manual runs need a real console, not a piped shell.
 
 ## Layout conventions

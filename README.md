@@ -94,8 +94,8 @@ Cross-compilation (from any OS):
 GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -o runny_linux ./src
 GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -o runny_linux ./src
 GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -o runny_mac   ./src
-GOOS=windows GOARCH=amd64                go build -o runny.exe   ./src
-GOOS=windows GOARCH=arm64                go build -o runny.exe   ./src
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o runny.exe   ./src
+GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build -o runny.exe   ./src
 ```
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml`, which verifies, cross-builds all six targets, and publishes them as release assets.
