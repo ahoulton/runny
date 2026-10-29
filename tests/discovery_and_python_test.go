@@ -305,3 +305,88 @@ func TestFindAllScriptsMultipleRoots(t *testing.T) {
 		t.Fatalf("FindAllScripts deduplication failed: %v", gotOverlap)
 	}
 }
+
+// TestGetRelPathDisambiguation checks that GetRelPath prefixes colliding relative
+// paths with root identity, while keeping unique relative paths clean.
+func TestGetRelPathDisambiguation(t *testing.T) {
+	dir := t.TempDir()
+	root1 := filepath.Join(dir, "Python")
+	root2 := filepath.Join(dir, "example-secondary")
+	if err := os.MkdirAll(filepath.Join(root1, "tools"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root2, "tools"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	s1 := filepath.Join(root1, "tools", "build.py")
+	s2 := filepath.Join(root2, "tools", "build.py")
+	s3 := filepath.Join(root1, "unique.py")
+
+	if err := os.WriteFile(s1, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s2, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s3, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	roots := []string{root1, root2}
+
+	// Colliding paths should include root identity
+	got1 := core.GetRelPath(s1, roots)
+	want1 := "[Python] tools/build.py"
+	if got1 != want1 {
+		t.Fatalf("GetRelPath(s1) = %q, want %q", got1, want1)
+	}
+
+	got2 := core.GetRelPath(s2, roots)
+	want2 := "[example-secondary] tools/build.py"
+	if got2 != want2 {
+		t.Fatalf("GetRelPath(s2) = %q, want %q", got2, want2)
+	}
+
+	// Unique paths stay clean without prefix
+	got3 := core.GetRelPath(s3, roots)
+	want3 := "unique.py"
+	if got3 != want3 {
+		t.Fatalf("GetRelPath(s3) = %q, want %q", got3, want3)
+	}
+
+	// Single root has zero prefix even if named build.py
+	gotSingle := core.GetRelPath(s1, []string{root1})
+	if gotSingle != "tools/build.py" {
+		t.Fatalf("GetRelPath single root = %q, want %q", gotSingle, "tools/build.py")
+	}
+
+	// Colliding base names fall back to full root path
+	rootA := filepath.Join(dir, "repoA", "scripts")
+	rootB := filepath.Join(dir, "repoB", "scripts")
+	if err := os.MkdirAll(rootA, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(rootB, 0755); err != nil {
+		t.Fatal(err)
+	}
+	sa := filepath.Join(rootA, "run.py")
+	sb := filepath.Join(rootB, "run.py")
+	if err := os.WriteFile(sa, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sb, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	rootsDup := []string{rootA, rootB}
+	gotA := core.GetRelPath(sa, rootsDup)
+	wantA := "[" + filepath.ToSlash(filepath.Clean(rootA)) + "] run.py"
+	if gotA != wantA {
+		t.Fatalf("GetRelPath(sa) = %q, want %q", gotA, wantA)
+	}
+	gotB := core.GetRelPath(sb, rootsDup)
+	wantB := "[" + filepath.ToSlash(filepath.Clean(rootB)) + "] run.py"
+	if gotB != wantB {
+		t.Fatalf("GetRelPath(sb) = %q, want %q", gotB, wantB)
+	}
+}

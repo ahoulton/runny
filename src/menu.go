@@ -275,14 +275,8 @@ func drawString(x, y int, style tcell.Style, str string) {
 	}
 }
 
-// getRelPath returns the relative path of script from the first matching root in searchRoots.
-// Falls back to the absolute path if Rel fails or traverses outside the root.
+// getRelPath returns the relative path of script from the matching search root,
+// disambiguating with root identity if relative labels collide across multiple search roots.
 func getRelPath(script string, searchRoots []string) string {
-	for _, root := range searchRoots {
-		rel, err := filepath.Rel(root, script)
-		if err == nil && !strings.HasPrefix(rel, "..") && rel != "." {
-			return filepath.ToSlash(rel)
-		}
-	}
-	return filepath.ToSlash(script)
+	return core.GetRelPath(script, searchRoots)
 }
