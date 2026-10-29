@@ -16,12 +16,12 @@ import (
 // In JSON, it can be unmarshaled from either a single string or an array of strings.
 type SearchPaths []string
 
-// UnmarshalJSON unmarshals either a JSON string or a JSON array of strings into SearchPaths.
+// UnmarshalJSON unmarshals either a JSON string or a JSON array of strings into SearchPaths,
+// preserving path values as written.
 func (s *SearchPaths) UnmarshalJSON(data []byte) error {
 	// Try single string first
 	var single string
 	if err := json.Unmarshal(data, &single); err == nil {
-		single = strings.TrimSpace(single)
 		if single == "" {
 			*s = nil
 		} else {
@@ -35,7 +35,6 @@ func (s *SearchPaths) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &list); err == nil {
 		var paths SearchPaths
 		for _, item := range list {
-			item = strings.TrimSpace(item)
 			if item != "" {
 				paths = append(paths, item)
 			}

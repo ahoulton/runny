@@ -726,6 +726,44 @@ func TestSearchDirectoryListConfig(t *testing.T) {
 			t.Fatalf("on-disk search_directory = %v, want %v", disk.SearchDirectory, wantDisk)
 		}
 	})
+
+	t.Run("configured directory paths with leading or trailing whitespace preserved", func(t *testing.T) {
+		dir := t.TempDir()
+		spaceDir := filepath.Join(dir, " folder with spaces ")
+		if err := os.MkdirAll(spaceDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		// Single string path with whitespace preserved
+		configPath := writeConfigFile(t, dir, `{
+			"search_directory": "`+filepath.ToSlash(spaceDir)+`"
+		}`)
+
+		cfg := core.LoadConfig(dir)
+		if len(cfg.SearchDirectory) != 1 || cfg.SearchDirectory[0] != spaceDir {
+			t.Fatalf("SearchDirectory = %v, want [%q]", cfg.SearchDirectory, spaceDir)
+		}
+
+		disk := mustParseConfig(t, configPath)
+		if len(disk.SearchDirectory) != 1 || disk.SearchDirectory[0] != filepath.ToSlash(spaceDir) {
+			t.Fatalf("on-disk search_directory = %v, want [%q]", disk.SearchDirectory, filepath.ToSlash(spaceDir))
+		}
+
+		// Array representation with whitespace preserved
+		configPath2 := writeConfigFile(t, dir, `{
+			"search_directory": ["`+filepath.ToSlash(spaceDir)+`"]
+		}`)
+
+		cfg2 := core.LoadConfig(dir)
+		if len(cfg2.SearchDirectory) != 1 || cfg2.SearchDirectory[0] != spaceDir {
+			t.Fatalf("SearchDirectory array = %v, want [%q]", cfg2.SearchDirectory, spaceDir)
+		}
+
+		disk2 := mustParseConfig(t, configPath2)
+		if len(disk2.SearchDirectory) != 1 || disk2.SearchDirectory[0] != filepath.ToSlash(spaceDir) {
+			t.Fatalf("on-disk search_directory array = %v, want [%q]", disk2.SearchDirectory, filepath.ToSlash(spaceDir))
+		}
+	})
 }
 
 func mustReadAll(t *testing.T, path string) string {
