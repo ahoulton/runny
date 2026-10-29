@@ -21,6 +21,7 @@ jobs:
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
+      tag_exists: ${{ steps.resolve.outputs.tag_exists }}
     steps:
       - name: Resolve tag and ref
         id: resolve
@@ -31,12 +32,18 @@ jobs:
           set -euo pipefail
           tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+          http_status=$(gh api --include "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" 2>/dev/null | head -n 1 | awk '{print $2}' || true)
+          if [ "${http_status}" = "200" ]; then
             echo "Tag '${tag}' exists on GitHub. Checking out '${tag}'."
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
             echo "checkout_ref=${tag}" >> "$GITHUB_OUTPUT"
-          else
-            echo "Tag '${tag}' does not exist on GitHub. Checking out ${GITHUB_SHA}."
+          elif [ "${http_status}" = "404" ]; then
+            echo "Tag '${tag}' does not exist on GitHub (HTTP 404). Checking out ${GITHUB_SHA}."
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
             echo "checkout_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unexpected HTTP status '${http_status}' checking tag '${tag}'. Aborting to prevent releasing unverified commit." >&2
+            exit 1
           fi
 
   verify:
@@ -131,10 +138,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
           COMMIT_SHA: ${{ github.sha }}
+          TAG_EXISTS: ${{ needs.prepare.outputs.tag_exists }}
         run: |
           set -euo pipefail
           ls -l dist
-          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+          if [ "${TAG_EXISTS}" = "false" ]; then
             echo "Tag ${TAG} does not exist on GitHub. Creating tag at ${COMMIT_SHA}..."
             gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${TAG}" -f sha="${COMMIT_SHA}"
           fi
