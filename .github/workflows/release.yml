@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to publish (e.g. v1.0.0)"
+        description: "Tag to publish (e.g. v1.0.0)"
         required: true
         type: string
 
@@ -15,13 +15,38 @@ permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
+    steps:
+      - name: Resolve tag and ref
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_INPUT: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+            echo "Tag '${tag}' exists on GitHub. Checking out '${tag}'."
+            echo "checkout_ref=${tag}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag '${tag}' does not exist on GitHub. Checking out ${GITHUB_SHA}."
+            echo "checkout_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
   verify:
     name: Verify
+    needs: prepare
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -35,7 +60,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
-    needs: verify
+    needs: [prepare, verify]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -62,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -75,7 +100,7 @@ jobs:
         run: go build -trimpath -ldflags "-s -w" -o "${{ matrix.binary }}" ./src
       - name: Stage binary
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -94,7 +119,7 @@ jobs:
 
   release:
     name: Publish release
-    needs: build
+    needs: [prepare, build]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v8
@@ -104,10 +129,15 @@ jobs:
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           ls -l dist
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} does not exist on GitHub. Creating tag at ${COMMIT_SHA}..."
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${TAG}" -f sha="${COMMIT_SHA}"
+          fi
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
           else
