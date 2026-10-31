@@ -10,6 +10,12 @@ on:
         description: "Tag to publish (e.g. v1.0.0)"
         required: true
         type: string
+  pull_request:
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/release.yml"
 
 permissions:
   contents: write
@@ -28,8 +34,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_INPUT: ${{ inputs.tag }}
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          if [ "${IS_PR}" = "true" ]; then
+            pr_num="${PR_NUMBER:-${GITHUB_REF_NAME%/*}}"
+            tag="pr-${pr_num}"
+            echo "Pull request #${pr_num} build. Setting tag to '${tag}'."
+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+            echo "checkout_ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           http_status=$(gh api --include "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" 2>/dev/null | head -n 1 | awk '{print $2}' || true)
@@ -126,6 +143,7 @@ jobs:
 
   release:
     name: Publish release
+    if: github.event_name != 'pull_request'
     needs: [prepare, build]
     runs-on: ubuntu-24.04
     steps:
