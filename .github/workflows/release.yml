@@ -15,7 +15,6 @@ on:
       - "**.go"
       - "go.mod"
       - "go.sum"
-      - ".github/workflows/release.yml"
 
 permissions:
   contents: write
@@ -35,14 +34,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_INPUT: ${{ inputs.tag }}
           IS_PR: ${{ github.event_name == 'pull_request' }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           if [ "${IS_PR}" = "true" ]; then
-            pr_num="${PR_NUMBER:-${GITHUB_REF_NAME%/*}}"
-            tag="pr-${pr_num}"
-            echo "Pull request #${pr_num} build. Setting tag to '${tag}'."
-            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+            echo "Pull request build: no release tag."
+            echo "tag=" >> "$GITHUB_OUTPUT"
             echo "tag_exists=false" >> "$GITHUB_OUTPUT"
             echo "checkout_ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"
             exit 0
@@ -128,7 +124,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          asset="runny_${TAG}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          if [ -n "${TAG}" ]; then
+            asset="runny_${TAG}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          else
+            asset="runny_${{ matrix.goos }}_${{ matrix.goarch }}"
+          fi
           if [ "${{ matrix.goos }}" = "windows" ]; then
             asset="${asset}.exe"
           fi
