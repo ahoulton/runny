@@ -31,19 +31,15 @@ func chooseScript(scripts []string, searchRoots []string, cfg core.Config) (stri
 	scrollOffset := 0
 
 	for {
-		// Filter scripts based on search query
 		filtered := filterScripts(scripts, query)
 
-		// Clamp selection index
 		if len(filtered) == 0 {
 			selectedIndex = 0
 		} else if selectedIndex >= len(filtered) {
 			selectedIndex = len(filtered) - 1
 		}
 
-		// Draw the menu
 		drawMenu(filtered, searchRoots, query, selectedIndex, &scrollOffset, autoRefresh)
-		// Wait for key press
 		kp := readKey()
 
 		switch kp.Action {
@@ -178,7 +174,6 @@ func filterScripts(scripts []string, query string) []string {
 func drawMenu(filtered []string, searchRoots []string, query string, selectedIndex int, scrollOffset *int, autoRefresh bool) {
 	maxVisible := getMaxVisibleItems()
 
-	// Clamp scroll offset
 	if selectedIndex < *scrollOffset {
 		*scrollOffset = selectedIndex
 	}
@@ -190,7 +185,6 @@ func drawMenu(filtered []string, searchRoots []string, query string, selectedInd
 		*scrollOffset = maxOffset
 	}
 
-	// Calculate required terminal width
 	header := "Use UP / DOWN to move, Enter to run, F5 to refresh, Esc to exit."
 	if autoRefresh {
 		header = "Use UP / DOWN to move, Enter to run, Esc to exit."
@@ -204,7 +198,6 @@ func drawMenu(filtered []string, searchRoots []string, query string, selectedInd
 		maxWidth = len(searchLine)
 	}
 
-	// Check widths of visible items
 	visibleEnd := min(*scrollOffset+maxVisible, len(filtered))
 	for i := *scrollOffset; i < visibleEnd; i++ {
 		relPath := getRelPath(filtered[i], searchRoots)
@@ -214,14 +207,13 @@ func drawMenu(filtered []string, searchRoots []string, query string, selectedInd
 		}
 	}
 
-	maxWidth += 2 // padding
+	maxWidth += 2
 	if maxWidth < 52 {
 		maxWidth = 52
 	}
 
 	resizeTerminalWidth(maxWidth)
 
-	// Clear and draw
 	screen.Clear()
 
 	style := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorDefault)
@@ -229,21 +221,17 @@ func drawMenu(filtered []string, searchRoots []string, query string, selectedInd
 
 	row := 0
 
-	// Header
 	drawString(0, row, style, header)
 	row++
 	drawString(0, row, style, searchLine)
 	row++
-	row++ // blank line
+	row++
 	drawString(0, row, style, "Choose a Python script to run:")
 	row++
-	row++ // blank line
 
-	// Script list
 	if len(filtered) == 0 {
 		drawString(0, row, style, "  (No matching scripts found)")
 	} else {
-		// "..." indicator at top
 		if *scrollOffset > 0 {
 			drawString(0, row, style, "  ...")
 			row++
@@ -259,7 +247,6 @@ func drawMenu(filtered []string, searchRoots []string, query string, selectedInd
 			row++
 		}
 
-		// "..." indicator at bottom
 		if visibleEnd < len(filtered) {
 			drawString(0, row, style, "  ...")
 		}

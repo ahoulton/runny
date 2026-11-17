@@ -19,7 +19,6 @@ type SearchPaths []string
 // UnmarshalJSON unmarshals either a JSON string or a JSON array of strings into SearchPaths,
 // preserving path values as written.
 func (s *SearchPaths) UnmarshalJSON(data []byte) error {
-	// Try single string first
 	var single string
 	if err := json.Unmarshal(data, &single); err == nil {
 		if single == "" {
@@ -30,7 +29,6 @@ func (s *SearchPaths) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	// Try array of strings
 	var list []string
 	if err := json.Unmarshal(data, &list); err == nil {
 		var paths SearchPaths
@@ -208,7 +206,6 @@ func SaveSearchDirectories(dir string, searchDirs []string) {
 // PickDirectory opens a native directory picker dialogue.
 // Returns the selected directory path or an empty string if cancelled.
 func PickDirectory() string {
-	// Try native dialog first
 	dir, err := zenity.SelectFile(
 		zenity.Directory(),
 		zenity.Title("Select Python Script Directory"),

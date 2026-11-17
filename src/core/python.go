@@ -20,7 +20,6 @@ func FindPythonForScript(script, appExeDir string, usePythonW bool, cfg Config) 
 	scriptDir := filepath.Dir(script)
 	currentDir := scriptDir
 
-	// Normalize exeDir for comparison
 	normExeDir, _ := filepath.Abs(appExeDir)
 
 	for {
@@ -35,27 +34,22 @@ func FindPythonForScript(script, appExeDir string, usePythonW bool, cfg Config) 
 			venvPython = filepath.Join(currentDir, cfg.VenvDir, "bin", "python3")
 		}
 
-		// Check if the venv Python exists
 		if info, err := os.Stat(venvPython); err == nil && !info.IsDir() {
 			return venvPython
 		}
 
-		// Check if we've reached exeDir (boundary)
 		normCurrent, _ := filepath.Abs(currentDir)
 		if strings.EqualFold(normCurrent, normExeDir) {
 			break
 		}
 
-		// Move to parent directory
 		parent := filepath.Dir(currentDir)
 		if parent == currentDir {
-			// Reached filesystem root
 			break
 		}
 		currentDir = parent
 	}
 
-	// Fall back to system Python
 	if runtime.GOOS == "windows" {
 		if usePythonW {
 			return "pythonw.exe"

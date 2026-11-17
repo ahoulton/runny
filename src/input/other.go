@@ -9,7 +9,6 @@ import (
 	"golang.org/x/term"
 )
 
-// Action represents an action chosen by the user at the post-script prompt.
 type Action int
 
 const (
@@ -19,8 +18,6 @@ const (
 	ActionInterrupt
 )
 
-// WaitPromptKey waits for a key press after script execution on non-Windows platforms.
-// If cancel is closed while waiting, it returns ActionInterrupt.
 func WaitPromptKey(cancel <-chan struct{}) Action {
 	fd := int(os.Stdin.Fd())
 
@@ -56,9 +53,9 @@ func WaitPromptKey(cancel <-chan struct{}) Action {
 		switch buf[0] {
 		case '\r', '\n':
 			return ActionEnter
-		case 27: // Esc
+		case 27:
 			return ActionEsc
-		case 3: // Ctrl+C
+		case 3:
 			return ActionInterrupt
 		case 'r', 'R':
 			return ActionRestart

@@ -15,28 +15,21 @@ import (
 	"runny/src/input"
 )
 
-// runScript executes a Python script and returns the user's prompt input.Action.
 func runScript(script string, originalWidth int, appExeDir, promptText string, cfg core.Config) input.Action {
 	filename := filepath.Base(script)
 	ext := strings.ToLower(filepath.Ext(script))
 	isPyw := ext == ".pyw"
 
-	// Determine if we need pythonw (Windows only, .pyw files)
 	usePythonW := isPyw && runtime.GOOS == "windows"
 
-	// Find the Python interpreter
 	pythonExe := core.FindPythonForScript(script, appExeDir, usePythonW, cfg)
 
-	// Finalize tcell before running the script
 	finiTerminal()
 
-	// Reset terminal width to original
 	resizeTerminalWidth(originalWidth)
 
-	// Set terminal title
 	setTerminalTitle("Runny (" + filename + ")")
 
-	// Clear the terminal
 	clearTerminal()
 
 	if isPyw {
@@ -45,7 +38,6 @@ func runScript(script string, originalWidth int, appExeDir, promptText string, c
 	return runForeground(pythonExe, script, filename, promptText)
 }
 
-// runForeground executes a .py script in the foreground with stdin/stdout/stderr connected.
 func runForeground(pythonExe, script, filename, promptText string) input.Action {
 	cmd := exec.Command(pythonExe, script)
 	cmd.Dir = filepath.Dir(script)
@@ -59,11 +51,9 @@ func runForeground(pythonExe, script, filename, promptText string) input.Action 
 
 	err := cmd.Run()
 
-	// Restore default signal handling
 	signal.Stop(sigCh)
 	signal.Reset(syscall.SIGINT)
 
-	// Check exit status
 	if err != nil {
 		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			exitCode := exitErr.ExitCode()
@@ -103,7 +93,6 @@ func sigInterrupt(sigCh <-chan os.Signal) (cancel <-chan struct{}, stop func()) 
 func runBackground(pythonExe, script, filename, promptText string) input.Action {
 	cmd := exec.Command(pythonExe, script)
 	cmd.Dir = filepath.Dir(script)
-	// Disconnect stdout/stderr for background execution
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.Stdin = nil

@@ -86,7 +86,6 @@ func Register() error {
 		return err
 	}
 
-	// Set ProgID display name
 	progBaseKey, _, err := registry.CreateKey(
 		registry.CURRENT_USER,
 		`Software\Classes\Runny.PythonScript`,
@@ -127,7 +126,6 @@ func Unregister() error {
 	}
 	exeName := filepath.Base(exe)
 
-	// Remove OpenWithProgids entries
 	for _, ext := range []string{".py", ".pyw"} {
 		owKey, err := registry.OpenKey(
 			registry.CURRENT_USER,
@@ -143,14 +141,12 @@ func Unregister() error {
 		}
 	}
 
-	// Delete subkeys under Applications\<exeName>
 	_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Applications\`+exeName+`\shell\open\command`)
 	_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Applications\`+exeName+`\shell\open`)
 	_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Applications\`+exeName+`\shell`)
 	_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Applications\`+exeName+`\SupportedTypes`)
 	_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Applications\`+exeName)
 
-	// Delete Runny.PythonScript ProgID
 	_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Runny.PythonScript\shell\open\command`)
 	_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Runny.PythonScript\shell\open`)
 	_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Classes\Runny.PythonScript\shell`)
