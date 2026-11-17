@@ -103,8 +103,6 @@ func TestVenvWalksUpwardFromScript(t *testing.T) {
 		t.Fatalf("venv lookup = %q, want %q", got, venvPython)
 	}
 
-	// The default venv name must NOT resolve to the custom directory, so the
-	// lookup falls back to the system interpreter.
 	defaultCfg := core.LoadConfig(dir)
 	wantFallback := "python.exe"
 	if runtime.GOOS != "windows" {
@@ -177,7 +175,6 @@ func TestPythonExecutableOverrideWins(t *testing.T) {
 	cfg.VenvDir = "virtual"
 	cfg.PythonExecutable = "C:/tools/python.exe"
 
-	// Matches nothing on disk: the override must be returned verbatim anyway.
 	if got := core.FindPythonForScript(filepath.Join(dir, "s.py"), dir, false, cfg); got != "C:/tools/python.exe" {
 		t.Fatalf("python_executable override not honored: %q", got)
 	}
@@ -299,7 +296,6 @@ func TestFindAllScriptsMultipleRoots(t *testing.T) {
 		t.Fatalf("FindAllScripts = %v, want %v", got, want)
 	}
 
-	// Overlapping roots check (deduplication)
 	gotOverlap := core.FindAllScripts([]string{root1, root1, root2}, cfg)
 	if len(gotOverlap) != 2 || gotOverlap[0] != s1 || gotOverlap[1] != s2 {
 		t.Fatalf("FindAllScripts deduplication failed: %v", gotOverlap)
@@ -335,7 +331,6 @@ func TestGetRelPathDisambiguation(t *testing.T) {
 
 	roots := []string{root1, root2}
 
-	// Colliding paths should include root identity
 	got1 := core.GetRelPath(s1, roots)
 	want1 := "[Python] tools/build.py"
 	if got1 != want1 {
@@ -348,20 +343,17 @@ func TestGetRelPathDisambiguation(t *testing.T) {
 		t.Fatalf("GetRelPath(s2) = %q, want %q", got2, want2)
 	}
 
-	// Unique paths stay clean without prefix
 	got3 := core.GetRelPath(s3, roots)
 	want3 := "unique.py"
 	if got3 != want3 {
 		t.Fatalf("GetRelPath(s3) = %q, want %q", got3, want3)
 	}
 
-	// Single root has zero prefix even if named build.py
 	gotSingle := core.GetRelPath(s1, []string{root1})
 	if gotSingle != "tools/build.py" {
 		t.Fatalf("GetRelPath single root = %q, want %q", gotSingle, "tools/build.py")
 	}
 
-	// Colliding base names fall back to full root path
 	rootA := filepath.Join(dir, "repoA", "scripts")
 	rootB := filepath.Join(dir, "repoB", "scripts")
 	if err := os.MkdirAll(rootA, 0755); err != nil {

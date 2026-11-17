@@ -66,7 +66,6 @@ func TestDefaultsAppliedWhenConfigMissing(t *testing.T) {
 		t.Fatalf("AutoRefresh = %v, want true", cfg.AutoRefresh)
 	}
 
-	// No config file should be created just by loading.
 	if _, err := os.Stat(filepath.Join(dir, "runny_config.json")); !os.IsNotExist(err) {
 		t.Fatalf("LoadConfig must not create a config file when none exists")
 	}
@@ -86,7 +85,6 @@ func TestOldConfigAutoUpgradesOnDisk(t *testing.T) {
 
 	cfg := core.LoadConfig(dir)
 
-	// In memory: full defaults
 	if cfg.VenvDir != core.DefaultVenvDir || len(cfg.IncludedExtensions) == 0 || len(cfg.ExcludedDirs) == 0 || cfg.AutoRefresh == nil || !*cfg.AutoRefresh {
 		t.Fatalf("defaults not applied in memory: %+v", cfg)
 	}
@@ -94,7 +92,6 @@ func TestOldConfigAutoUpgradesOnDisk(t *testing.T) {
 		t.Fatalf("SearchDirectory = %v, want [%q]", cfg.SearchDirectory, scriptDir)
 	}
 
-	// On disk: same search directory, plus the new option keys
 	disk := mustParseConfig(t, configPath)
 	if len(disk.SearchDirectory) != 1 || disk.SearchDirectory[0] != filepath.ToSlash(scriptDir) {
 		t.Fatalf("upgrade must preserve search_directory on disk, got %v", disk.SearchDirectory)
@@ -103,7 +100,6 @@ func TestOldConfigAutoUpgradesOnDisk(t *testing.T) {
 		t.Fatalf("config file not upgraded with defaults:\n%s", mustReadAll(t, configPath))
 	}
 
-	// Second load: everything present, file must not be rewritten again
 	infoBefore, err := os.Stat(configPath)
 	if err != nil {
 		t.Fatal(err)

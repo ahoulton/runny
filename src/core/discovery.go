@@ -174,7 +174,6 @@ func GetRelPath(script string, searchRoots []string) string {
 		return relPath
 	}
 
-	// Check if this relative path collides across multiple search roots
 	for _, otherRoot := range searchRoots {
 		if otherRoot == "" || filepath.Clean(otherRoot) == filepath.Clean(matchedRoot) {
 			continue
@@ -222,7 +221,6 @@ func findScriptsWalk(dir, rel string, scripts *[]string, ex exclusions, included
 			continue
 		}
 
-		// Check if the file matches a configured script extension
 		ext := strings.ToLower(filepath.Ext(name))
 		if includedExtensions[ext] {
 			absPath, err := filepath.Abs(fullPath)

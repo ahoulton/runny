@@ -12,7 +12,6 @@ import (
 
 var screen tcell.Screen
 
-// KeyAction represents the type of key pressed
 type KeyAction int
 
 const (
@@ -30,14 +29,12 @@ type refreshScriptsEvent struct {
 	scripts []string
 }
 
-// KeyPress holds information about a single key press
 type KeyPress struct {
 	Action  KeyAction
 	Char    rune
 	Scripts []string // non-nil for ActionAutoRefresh
 }
 
-// initTerminal creates and initializes the tcell screen.
 func initTerminal() {
 	if screen != nil {
 		return
@@ -60,7 +57,6 @@ func initTerminal() {
 	}
 }
 
-// finiTerminal finalizes the screen and restores the terminal to normal mode.
 func finiTerminal() {
 	if screen != nil {
 		screen.Fini()
@@ -68,7 +64,6 @@ func finiTerminal() {
 	}
 }
 
-// readKey blocks until the user presses a key and returns the KeyPress.
 func readKey() KeyPress {
 	for {
 		ev := screen.PollEvent()
@@ -103,7 +98,6 @@ func readKey() KeyPress {
 	}
 }
 
-// clearTerminal clears the terminal screen.
 func clearTerminal() {
 	if screen != nil {
 		screen.Clear()
@@ -122,7 +116,6 @@ func clearTerminal() {
 	_ = cmd.Run()
 }
 
-// setTerminalTitle sets the console window title using ANSI escape sequences.
 func setTerminalTitle(title string) {
 	_, err := fmt.Fprintf(os.Stdout, "\033]0;%s\007", title)
 	if err != nil {
@@ -130,7 +123,6 @@ func setTerminalTitle(title string) {
 	}
 }
 
-// getTerminalWidth returns the current terminal width in columns.
 func getTerminalWidth() int {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
 		return w
@@ -144,7 +136,6 @@ func getTerminalWidth() int {
 	return 120
 }
 
-// getTerminalHeight returns the current terminal height in rows.
 func getTerminalHeight() int {
 	if _, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil && h > 0 {
 		return h
@@ -158,7 +149,6 @@ func getTerminalHeight() int {
 	return 40
 }
 
-// getMaxVisibleItems returns the maximum number of menu items that can be displayed.
 func getMaxVisibleItems() int {
 	h := getTerminalHeight() - 8
 	if h < 5 {
@@ -167,7 +157,6 @@ func getMaxVisibleItems() int {
 	return h
 }
 
-// resizeTerminalWidth dynamically resizes the terminal window width.
 func resizeTerminalWidth(cols int) {
 	if runtime.GOOS != "windows" {
 		return

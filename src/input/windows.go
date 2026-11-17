@@ -40,7 +40,6 @@ type keyEventRecordStruct struct {
 	dwControlKeyState uint32
 }
 
-// Action represents an action chosen by the user at the post-script prompt.
 type Action int
 
 const (
@@ -50,8 +49,6 @@ const (
 	ActionInterrupt
 )
 
-// WaitPromptKey waits for a key press after script execution on Windows.
-// If cancel is closed while waiting, it returns ActionInterrupt.
 func WaitPromptKey(cancel <-chan struct{}) Action {
 	hIn, _, _ := procGetStdHandle.Call(uintptr(stdInputHandle))
 	if hIn == 0 || hIn == uintptr(syscall.InvalidHandle) {
@@ -109,7 +106,7 @@ func WaitPromptKey(cancel <-chan struct{}) Action {
 				switch ke.unicodeChar {
 				case '\r', '\n':
 					return ActionEnter
-				case 27: // Esc
+				case 27:
 					return ActionEsc
 				case 3: // Ctrl+C (only delivered if processed input is off)
 					return ActionInterrupt
