@@ -43,7 +43,7 @@ After a script finishes you get a prompt: `Enter` returns to the launcher, `R` r
 
 `.pyw` scripts on Windows run in the background via `pythonw.exe`; Runny stays alive until you press `Esc`, and `Ctrl+C` at the prompt kills the script.
 
-If no scripts are found, Runny asks you to pick a directory (native dialog, or a text prompt when no GUI is available). The choice is saved.
+If no scripts are found, Runny asks you to pick a directory (native dialogue, or a text prompt when no GUI is available). The choice is saved.
 
 ### Command line
 
