@@ -42,14 +42,14 @@ func initTerminal() {
 	var err error
 	screen, err = tcell.NewScreen()
 	if err != nil {
-		_, err := fmt.Fprintf(os.Stderr, "Failed to initialize terminal: %v\n", err)
+		_, err := fmt.Fprintf(os.Stderr, "Failed to initialise terminal: %v\n", err)
 		if err != nil {
 			return
 		}
 		os.Exit(1)
 	}
 	if err := screen.Init(); err != nil {
-		_, err := fmt.Fprintf(os.Stderr, "Failed to initialize screen: %v\n", err)
+		_, err := fmt.Fprintf(os.Stderr, "Failed to initialise screen: %v\n", err)
 		if err != nil {
 			return
 		}

@@ -11,9 +11,9 @@ import (
 	"runny/src/core"
 )
 
-// TestIncludedExtensionsNormalize checks that extension input is normalized
+// TestIncludedExtensionsNormalise checks that extension input is normalised
 // (lowercase, leading dot) and that discovery only accepts configured types.
-func TestIncludedExtensionsNormalize(t *testing.T) {
+func TestIncludedExtensionsNormalise(t *testing.T) {
 	dir := t.TempDir()
 	scriptDir := filepath.Join(dir, "scripts")
 	if err := os.MkdirAll(scriptDir, 0755); err != nil {
@@ -34,7 +34,7 @@ func TestIncludedExtensionsNormalize(t *testing.T) {
 		base[filepath.Base(s)] = true
 	}
 	if !base["e.pyw"] || !base["b.PYW"] || !base["c.pyi"] {
-		t.Fatalf("configured extensions not honored (case/leading-dot normalization): %v", base)
+		t.Fatalf("configured extensions not honoured (case/leading-dot normalisation): %v", base)
 	}
 	if base["a.py"] || base["d.txt"] {
 		t.Fatalf("non-configured extensions discovered: %v", base)
@@ -78,9 +78,9 @@ func TestDiscoveryIsRecursiveAndSorted(t *testing.T) {
 	}
 }
 
-// TestVenvWalksUpwardFromScript checks that the configured venv_dir is found
-// walking upward from the script directory.
-func TestVenvWalksUpwardFromScript(t *testing.T) {
+// TestVenvWalksUpwardsFromScript checks that the configured venv_dir is found
+// walking upwards from the script directory.
+func TestVenvWalksUpwardsFromScript(t *testing.T) {
 	dir := t.TempDir()
 	var venvPython string
 	if runtime.GOOS == "windows" {
@@ -176,7 +176,7 @@ func TestPythonExecutableOverrideWins(t *testing.T) {
 	cfg.PythonExecutable = "C:/tools/python.exe"
 
 	if got := core.FindPythonForScript(filepath.Join(dir, "s.py"), dir, false, cfg); got != "C:/tools/python.exe" {
-		t.Fatalf("python_executable override not honored: %q", got)
+		t.Fatalf("python_executable override not honoured: %q", got)
 	}
 }
 
