@@ -13,7 +13,7 @@ import (
 )
 
 // SearchPaths represents one or more directories to search for scripts.
-// In JSON, it can be unmarshaled from either a single string or an array of strings.
+// In JSON, it can be unmarshalled from either a single string or an array of strings.
 type SearchPaths []string
 
 // UnmarshalJSON unmarshals either a JSON string or a JSON array of strings into SearchPaths,
@@ -214,7 +214,7 @@ func PickDirectory() string {
 		return dir
 	}
 
-	// Fall back to text prompt on all platforms if dialog is unavailable/cancelled
+	// Fall back to text prompt on all platforms if dialogue is unavailable/cancelled
 	fmt.Print("Enter directory path to search for scripts (blank to cancel): ")
 	reader := bufio.NewReader(os.Stdin)
 	line, _ := reader.ReadString('\n')

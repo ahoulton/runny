@@ -19,8 +19,8 @@ type exclusions struct {
 
 // buildExclusions splits excluded_dirs entries into bare directory names and
 // root-relative paths. An entry containing a separator is a path; anything
-// else keeps the original "skip any directory with this name" behavior.
-// Matching is case-insensitive, matching the previous hardcoded map behavior
+// else keeps the original "skip any directory with this name" behaviour.
+// Matching is case-insensitive, matching the previous hardcoded map behaviour
 // (which listed both "Lib" and "lib"), and path entries accept either
 // separator.
 //
@@ -39,7 +39,7 @@ func buildExclusions(cfg Config) exclusions {
 			continue
 		}
 		if strings.ContainsAny(entry, `/\`) {
-			if p := normalizeExcludedPath(entry); p != "" {
+			if p := normaliseExcludedPath(entry); p != "" {
 				ex.paths[p] = true
 			}
 			continue
@@ -49,7 +49,7 @@ func buildExclusions(cfg Config) exclusions {
 	return ex
 }
 
-// normalizeExcludedPath converts a root-relative excluded path to the form
+// normaliseExcludedPath converts a root-relative excluded path to the form
 // used during the walk: forward slashes, no "." segments or trailing slash,
 // lowercase. Empty and root-only entries are dropped; the scan root itself is
 // never excluded. Absolute entries (POSIX "/x", Windows "\x" or "//host/share")
@@ -58,7 +58,7 @@ func buildExclusions(cfg Config) exclusions {
 // to search_directory, hiding a subtree the user did not name. Drive-qualified
 // entries never reach here — buildExclusions drops them, including the
 // separator-less "D:x" form. Prefixing such an entry with "./" opts back in.
-func normalizeExcludedPath(entry string) string {
+func normaliseExcludedPath(entry string) string {
 	p := path.Clean(strings.ReplaceAll(entry, `\`, "/"))
 	if p == "" || p == "." || p == ".." || strings.HasPrefix(p, "/") {
 		return ""
@@ -78,7 +78,7 @@ func isDriveQualified(entry string) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-// buildIncludedExtensions normalizes the configured script extensions to
+// buildIncludedExtensions normalises the configured script extensions to
 // lowercase with a leading dot (e.g. "PYW" -> ".pyw").
 func buildIncludedExtensions(cfg Config) map[string]bool {
 	m := make(map[string]bool, len(cfg.IncludedExtensions))
@@ -127,7 +127,7 @@ func FindScripts(root string, cfg Config) []string {
 
 // RootIdentity returns a concise label identifying root among searchRoots.
 // If the base name of root is unique among all searchRoots, it returns the base name.
-// Otherwise, it falls back to the slash-normalized path of root.
+// Otherwise, it falls back to the slash-normalised path of root.
 func RootIdentity(root string, searchRoots []string) string {
 	clean := filepath.Clean(root)
 	base := filepath.Base(clean)
@@ -153,7 +153,7 @@ func RootIdentity(root string, searchRoots []string) string {
 // When multiple search roots are configured and a relative label collides across
 // roots (e.g. both roots contain tools/build.py), the label is prefixed with the
 // root identity (e.g. "[Python] tools/build.py") so the user can distinguish them.
-// Falls back to the slash-normalized absolute path if script is outside all roots.
+// Falls back to the slash-normalised absolute path if script is outside all roots.
 func GetRelPath(script string, searchRoots []string) string {
 	var matchedRoot, relPath string
 	for _, root := range searchRoots {

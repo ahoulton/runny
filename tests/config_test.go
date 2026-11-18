@@ -1,5 +1,5 @@
 // Package tests contains the formal test suite that Runny must always pass
-// (run with `go test ./tests`). It exercises the exported behavior of the
+// (run with `go test ./tests`). It exercises the exported behaviour of the
 // src/core package: configuration loading/defaults/auto-upgrade/saving.
 package tests
 
@@ -15,7 +15,7 @@ import (
 	"runny/src/core"
 )
 
-// writeConfigFile is a helper that writes a config file with slash-normalized
+// writeConfigFile is a helper that writes a config file with slash-normalised
 // values for use in a test.
 func writeConfigFile(t *testing.T, dir string, content string) string {
 	t.Helper()
@@ -282,9 +282,9 @@ func TestExcludedDirsRelativePath(t *testing.T) {
 	}
 }
 
-// TestExcludedDirsRelativePathNormalized checks that path entries accept
+// TestExcludedDirsRelativePathNormalised checks that path entries accept
 // either separator, a leading "./", a trailing separator, and mixed case.
-func TestExcludedDirsRelativePathNormalized(t *testing.T) {
+func TestExcludedDirsRelativePathNormalised(t *testing.T) {
 	dir := t.TempDir()
 	scriptDir := filepath.Join(dir, "scripts")
 	for _, p := range []string{"Redirect/Core", "Redirect/Keep", "Other/Core"} {
@@ -316,7 +316,7 @@ func TestExcludedDirsRelativePathNormalized(t *testing.T) {
 	}
 
 	if have["Redirect/Core/in_core.py"] {
-		t.Errorf("normalized path entry did not exclude Redirect/Core (have %v)", have)
+		t.Errorf("normalised path entry did not exclude Redirect/Core (have %v)", have)
 	}
 	for _, must := range []string{"Redirect/Keep/in_keep.py", "Other/Core/in_other_core.py"} {
 		if !have[must] {
@@ -327,7 +327,7 @@ func TestExcludedDirsRelativePathNormalized(t *testing.T) {
 
 // discoversScript reports whether FindScripts finds script when scanning
 // scriptDir with the given excluded_dirs. It goes through LoadConfig so the
-// config path (defaults, normalization) is exercised, not just FindScripts.
+// config path (defaults, normalisation) is exercised, not just FindScripts.
 func discoversScript(t *testing.T, configDir, scriptDir, script string, excluded []string) bool {
 	t.Helper()
 	cfg := core.LoadConfig(configDir)
@@ -469,7 +469,7 @@ func TestSaveCreatesConfigWithFullOptions(t *testing.T) {
 	}
 }
 
-// TestSaveConfigDirect checks that SaveConfig directly serializes a Config struct
+// TestSaveConfigDirect checks that SaveConfig directly serialises a Config struct
 // with all fields to runny_config.json.
 func TestSaveConfigDirect(t *testing.T) {
 	dir := t.TempDir()

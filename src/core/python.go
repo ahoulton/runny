@@ -8,7 +8,7 @@ import (
 )
 
 // FindPythonForScript searches for a virtual environment Python interpreter.
-// It walks upward from the script's directory to exeDir, looking for the
+// It walks upwards from the script's directory to exeDir, looking for the
 // configured venv directory. If the config specifies an explicit
 // python_executable, it is returned verbatim and no detection happens.
 func FindPythonForScript(script, appExeDir string, usePythonW bool, cfg Config) string {
