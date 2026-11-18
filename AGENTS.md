@@ -9,6 +9,8 @@ Read that file too before running commands.
 
 **Only necessary comments.** Write comments only when they explain why something non-obvious is done, document complex logic, or clarify platform-specific quirks (e.g. Win32 API contracts, signal lifetimes, containment semantics). Do not add comments that merely restate what the code clearly expresses, describe straightforward function calls, or narrate obvious syntax.
 
+**Use British English.** Use British English spelling and terminology across all documentation, code comments, commit messages, and PR descriptions, not American English (e.g. `dialogue`, `normalise`, `behaviour`, `artefact`, `initialise`).
+
 **Keep the agent docs accurate.** This file MUST be updated after making changes that make anything within it invalid or incorrect, and `AGENTS.local.md` likewise for environment details. `README.md` is user-facing and tracked: keep it in step when CLI flags, config fields, key bindings, or release assets change.
 
 **Prefer IDE tooling; verify with the CLI.** If your environment exposes a GoLand/JetBrains MCP server (`lint_files`, `get_file_problems`, `build_project`), use it as the first source for code inspection, linting, problem analysis and building. Fall back to the CLI checks in this file when that tooling is unavailable, fails, or cannot answer the question — for example it exposes no test runner and no cross-compilation-with-env, so `go test` and `GOOS`/`GOARCH` builds are always CLI work, or `build_project` returns "limited build diagnostics functionality" with no compiler messages. Either way, state in your reply which checks you actually ran and, when you fall back, why. Silent substitution is a violation, and so is skipping verification because "the CLI also works".
